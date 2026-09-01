@@ -1,0 +1,93 @@
+# Summit Leadership Check-In
+
+## Overview
+
+This project is a mobile-friendly web page that allows a parent to check in family members for Summit Leadership Academy. The design should closely match the reference images in `Screenshots`, using `images/logo.png` as the logo.
+
+## Project files
+
+- `www/` — the complete static website
+- `www/config.js` — the deployed Apps Script URL
+- `google-apps-script/Code.gs` — the bound Google Apps Script endpoint
+- `google-apps-script/appsscript.json` — the Apps Script manifest
+- `google-apps-script/SETUP.md` — deployment and connection instructions
+- `tests/apps-script.test.js` — local tests for create, update, and validation behavior
+
+## Check-in flow
+
+1. The parent selects their family name.
+2. The page displays the members associated with that family.
+3. No family members are selected automatically. The parent must select everyone who is present each day.
+4. The parent may add optional notes and submit the check-in.
+5. After the check-in is saved, the form is replaced with a clean, full-page confirmation message.
+
+The selected family name is persisted in the browser with `localStorage` for future visits on that device.
+
+## Same-day check-ins and edits
+
+A family may have only one check-in row per day. A day is determined using the Google Sheet's configured timezone.
+
+Selecting a family always starts with no members selected and blank notes; the site does not make a separate request to preload today's attendance. When the form is submitted, the endpoint finds that family's current-day check-in. If one exists, it overwrites that row instead of creating another row and retains its existing `CheckInID`.
+
+## Google Sheets data
+
+The Google Sheet is owned by the Summit organizers and remains private.
+
+### `CheckIns` sheet
+
+Columns:
+
+- `CheckInID`
+- `Timestamp`
+- `Family Name`
+- `Members Present`
+- `Notes`
+
+Each new check-in receives a random UUID for `CheckInID`.
+
+### `Lists` sheet
+
+Columns:
+
+- `Family Name`
+- `Member Name`
+
+The family and member choices shown by the site come from this sheet.
+
+## Google Apps Script endpoint
+
+The project includes Google Apps Script source code and setup instructions. The sheet owner will copy the script into the Google Sheet's Apps Script project and deploy it as a web app.
+
+The deployed endpoint acts as a limited bridge between the static site and the private Google Sheet. It supports only the operations required to:
+
+- Read the family and member list
+- Create a new check-in
+- Update the family's existing check-in for the current day
+
+The endpoint is publicly reachable because the site has no authentication or individual user accounts. The Google Sheet itself remains private, and the endpoint exposes only the limited operations listed above. Submitted families, members, notes, and other fields must be strictly validated by the script before any sheet data is returned or changed.
+
+## Setup and preview
+
+Follow [`google-apps-script/SETUP.md`](google-apps-script/SETUP.md) to connect and deploy the existing Google Sheet.
+
+To preview the complete interface before connecting Google Apps Script, serve the project with any static HTTP server and open `/www/?demo=1`. Demo submissions stay in that browser's local storage and do not modify Google Sheets.
+
+The normal `/www/` page does not use sample data. Until `www/config.js` contains a deployed Apps Script `/exec` URL, it displays a setup message instead of accepting check-ins.
+
+Run the Apps Script behavior tests with:
+
+```text
+node tests/apps-script.test.js
+```
+
+## Stack
+
+- Frontend: plain HTML, CSS, and JavaScript with no frameworks
+- Hosting: static web hosting
+- Integration layer: Google Apps Script web app
+- Database: Google Sheets
+- Browser persistence: `localStorage`
+
+## Google Sheet
+
+https://docs.google.com/spreadsheets/d/16DMdld_kiRYuFJnISnHFs9dNJUqyapDMuUCnBY9tyrw/edit?gid=0#gid=0

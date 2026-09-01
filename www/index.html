@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="description" content="Summit Leadership Academy family attendance check-in">
+    <title>Summit Leadership Check-In</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="config.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell" id="app-shell">
+      <main class="page" id="form-page">
+        <section class="card" aria-labelledby="page-title">
+          <div class="brand-panel">
+            <img src="assets/logo.png" alt="Summit Leadership Academy">
+          </div>
+
+          <div class="card-heading">
+            <p class="eyebrow">Daily attendance</p>
+            <h1 id="page-title">Family check-in</h1>
+            <p>Select the family members who are here today.</p>
+          </div>
+
+          <div class="notice notice-error" id="setup-notice" role="alert" hidden>
+            <strong>Setup needed</strong>
+            <span>Add the deployed Google Apps Script URL to <code>www/config.js</code>.</span>
+          </div>
+
+          <div class="notice notice-error" id="error-notice" role="alert" hidden>
+            <strong>We couldn't complete that request.</strong>
+            <span id="error-message">Please try again.</span>
+            <button class="text-button" id="retry-button" type="button">Try again</button>
+          </div>
+
+          <form id="check-in-form" novalidate>
+            <div class="field">
+              <label for="family-select">Family name</label>
+              <div class="select-wrap">
+                <select id="family-select" name="family" required disabled>
+                  <option value="">Loading families…</option>
+                </select>
+                <span class="select-icon" aria-hidden="true"></span>
+              </div>
+            </div>
+
+            <fieldset class="field members-field" id="members-field" hidden>
+              <legend>Members present</legend>
+              <p class="field-help" id="member-help">Select everyone who is here today.</p>
+              <div class="member-grid" id="member-grid" aria-describedby="member-help"></div>
+              <p class="field-error" id="members-error" role="alert" hidden>Select at least one family member.</p>
+            </fieldset>
+
+            <div class="field" id="notes-field" hidden>
+              <label for="notes">Notes <span class="optional">Optional</span></label>
+              <textarea id="notes" name="notes" maxlength="500" rows="4" placeholder="Anything the Summit team should know?"></textarea>
+              <div class="character-count"><span id="notes-count">0</span>/500</div>
+            </div>
+
+            <div class="inline-status" id="loading-status" role="status" aria-live="polite">
+              <span class="spinner" aria-hidden="true"></span>
+              <span id="loading-text">Loading families…</span>
+            </div>
+          </form>
+        </section>
+      </main>
+
+      <footer class="action-bar" id="action-bar">
+        <button class="secondary-button" id="cancel-button" type="button" disabled>Cancel</button>
+        <button class="primary-button" id="submit-button" type="submit" form="check-in-form" disabled>
+          <span class="button-label">Check In</span>
+          <span class="button-spinner" aria-hidden="true"></span>
+        </button>
+      </footer>
+
+      <main class="success-page" id="success-page" hidden>
+        <section class="success-content" aria-labelledby="success-title">
+          <div class="success-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="m9.55 18.2-5.7-5.7 2.1-2.1 3.6 3.6 8.5-8.5 2.1 2.1-10.6 10.6Z"/></svg>
+          </div>
+          <p class="eyebrow">Attendance saved</p>
+          <h1 id="success-title">You're checked in!</h1>
+          <p class="success-family" id="success-family"></p>
+          <p class="success-members" id="success-members"></p>
+          <div class="success-actions">
+            <button class="primary-button success-action" id="another-family-button" type="button">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20v-2Z"/></svg>
+              Check in another family
+            </button>
+          </div>
+        </section>
+        <div class="success-brand">
+          <img src="assets/logo.png" alt="">
+        </div>
+      </main>
+    </div>
+  </body>
+</html>
