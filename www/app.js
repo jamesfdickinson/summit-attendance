@@ -2,6 +2,7 @@
   "use strict";
 
   const STORAGE_KEY = "summit-check-in-family";
+  const FAMILY_DATA_STORAGE_KEY = "summit-check-in-families-v1";
   const DEMO_STORAGE_KEY = "summit-check-in-demo-records";
   const config = window.SUMMIT_CONFIG || {};
   const endpoint = String(config.API_URL || "").trim();
@@ -145,6 +146,37 @@
     }
   }
 
+  function readCachedFamilies() {
+    try {
+      const cached = JSON.parse(localStorage.getItem(FAMILY_DATA_STORAGE_KEY) || "null");
+      return Array.isArray(cached?.families) ? cached.families : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function cacheFamilies(families) {
+    try {
+      localStorage.setItem(FAMILY_DATA_STORAGE_KEY, JSON.stringify({
+        cachedAt: new Date().toISOString(),
+        families
+      }));
+    } catch (_error) {
+      // The live response still works when browser storage is unavailable.
+    }
+  }
+
+  function validFamilies(value) {
+    if (!Array.isArray(value)) return [];
+    return value.filter((family) => (
+      family &&
+      typeof family.name === "string" &&
+      family.name.length > 0 &&
+      Array.isArray(family.members) &&
+      family.members.every((member) => typeof member === "string" && member.length > 0)
+    ));
+  }
+
   function showError(message, retryVisible) {
     elements.errorMessage.textContent = message;
     elements.errorNotice.hidden = false;
@@ -185,6 +217,41 @@
     elements.family.disabled = false;
   }
 
+  function selectRememberedFamily() {
+    const rememberedFamily = readRememberedFamily();
+    if (rememberedFamily && state.families.has(rememberedFamily)) {
+      elements.family.value = rememberedFamily;
+      loadSelectedFamily();
+      return true;
+    }
+    return false;
+  }
+
+  function refreshRenderedFamilies(families) {
+    const currentFamily = elements.family.value;
+    const selected = selectedMembers();
+    const notes = elements.notes.value;
+    const formWasOpen = !elements.membersField.hidden;
+
+    renderFamilies(families);
+    if (currentFamily && state.families.has(currentFamily)) {
+      elements.family.value = currentFamily;
+      if (formWasOpen) {
+        const allowed = new Set(state.families.get(currentFamily));
+        renderMembers(state.families.get(currentFamily), selected.filter((member) => allowed.has(member)));
+        elements.notes.value = notes;
+        updateNotesCount();
+      }
+    } else if (currentFamily) {
+      state.record = null;
+      elements.membersField.hidden = true;
+      elements.notesField.hidden = true;
+      elements.notes.value = "";
+      updateNotesCount();
+    }
+    setFormControls();
+  }
+
   function renderMembers(memberNames, selectedNames) {
     const selected = new Set(selectedNames || []);
     const fragment = document.createDocumentFragment();
@@ -212,7 +279,6 @@
   async function loadFamilies() {
     clearError();
     elements.setupNotice.hidden = true;
-    setLoading("Loading families…", true);
     elements.family.disabled = true;
 
     if (!isDemo && !hasEndpoint) {
@@ -222,23 +288,39 @@
       return;
     }
 
+    const cachedFamilies = validFamilies(readCachedFamilies());
+    const hasCache = cachedFamilies.length > 0;
+    if (hasCache) {
+      renderFamilies(cachedFamilies);
+      selectRememberedFamily();
+      setLoading("Refreshing families…", true);
+    } else {
+      setLoading("Loading families…", true);
+    }
+
     try {
       const response = await api.getFamilies();
-      const families = Array.isArray(response.families) ? response.families : [];
-      renderFamilies(families);
-      setLoading("", false);
-
-      const rememberedFamily = readRememberedFamily();
-      if (rememberedFamily && state.families.has(rememberedFamily)) {
-        elements.family.value = rememberedFamily;
-        loadSelectedFamily();
-      } else {
-        elements.family.focus();
+      const families = validFamilies(response.families);
+      if (families.length === 0) {
+        throw new Error("No families were found in the Lists sheet.");
       }
+
+      if (!hasCache) {
+        renderFamilies(families);
+        if (!selectRememberedFamily()) elements.family.focus();
+      } else if (JSON.stringify(families) !== JSON.stringify(cachedFamilies)) {
+        refreshRenderedFamilies(families);
+      }
+      cacheFamilies(families);
+      setLoading("", false);
     } catch (error) {
       setLoading("", false);
-      showError(error.message, true);
-      elements.family.replaceChildren(new Option("Unable to load families", ""));
+      if (hasCache) {
+        showError("Showing the saved family list because the latest list could not be loaded.", true);
+      } else {
+        showError(error.message, true);
+        elements.family.replaceChildren(new Option("Unable to load families", ""));
+      }
     }
   }
 
