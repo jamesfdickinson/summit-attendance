@@ -11,6 +11,7 @@
 
   const elements = {
     formPage: document.getElementById("form-page"),
+    install: document.getElementById("install-button"),
     form: document.getElementById("check-in-form"),
     family: document.getElementById("family-select"),
     membersField: document.getElementById("members-field"),
@@ -41,6 +42,8 @@
     loadingFamily: false,
     saving: false
   };
+
+  let deferredInstallPrompt = null;
 
   const demoFamilies = [
     { name: "Dickinson, L", members: ["Lisa", "Abby", "Noah", "Hannah", "Andrew"] },
@@ -444,5 +447,37 @@
   elements.retry.addEventListener("click", loadFamilies);
   elements.anotherFamily.addEventListener("click", startAnotherFamily);
 
+  window.addEventListener("beforeinstallprompt", (event) => {
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const isInstalled = window.matchMedia("(display-mode: standalone)").matches;
+    if (!isAndroid || isInstalled) return;
+
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    elements.install.hidden = false;
+  });
+
+  elements.install.addEventListener("click", async () => {
+    if (!deferredInstallPrompt) return;
+    elements.install.hidden = true;
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+  });
+
+  window.addEventListener("appinstalled", () => {
+    deferredInstallPrompt = null;
+    elements.install.hidden = true;
+  });
+
   loadFamilies();
+
+  // Remove the earlier offline-cache worker. The app requires a live connection
+  // and remains installable through its web app manifest.
+  if ("serviceWorker" in navigator) {
+    const appScope = new URL("./", window.location.href).href;
+    navigator.serviceWorker.getRegistration(appScope)
+      .then((registration) => registration?.scope === appScope && registration.unregister())
+      .catch(() => {});
+  }
 })();

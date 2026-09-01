@@ -63,6 +63,36 @@ input:focus-visible + span {
   padding-bottom: calc(84px + env(safe-area-inset-bottom));
 }
 
+.install-button {
+  position: fixed;
+  z-index: 15;
+  top: max(12px, env(safe-area-inset-top));
+  right: 14px;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  padding: 10px;
+  place-items: center;
+  border: 1px solid #d9e0e6;
+  border-radius: 50%;
+  color: var(--brand);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 3px 12px rgba(30, 48, 67, 0.12);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+
+.install-button:hover {
+  color: #fff;
+  border-color: var(--brand);
+  background: var(--brand);
+}
+
+.install-button svg {
+  width: 22px;
+  fill: currentColor;
+}
+
 .page {
   width: min(100%, 760px);
   margin: 0 auto;

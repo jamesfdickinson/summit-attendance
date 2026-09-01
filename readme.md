@@ -8,6 +8,7 @@ This project is a mobile-friendly web page that allows a parent to check in fami
 
 - `www/` — the complete static website
 - `www/config.js` — the deployed Apps Script URL
+- `www/manifest.webmanifest` — installable app metadata
 - `google-apps-script/Code.gs` — the bound Google Apps Script endpoint
 - `google-apps-script/appsscript.json` — the Apps Script manifest
 - `google-apps-script/SETUP.md` — deployment and connection instructions
@@ -84,7 +85,9 @@ node tests/apps-script.test.js
 
 - Frontend: plain HTML, CSS, and JavaScript with no frameworks
 - Hosting: static web hosting
+- Installation: Progressive Web App (PWA) on supported phones and browsers
 - Integration layer: Google Apps Script web app
 - Database: Google Sheets
 - Browser persistence: `localStorage` for the selected family and family/member list
 
+On supported Android browsers, a small install icon appears only when the browser exposes a real installation prompt. The site never displays an automatic install banner. The icon remains hidden on iPhone because iOS does not allow a webpage button to directly trigger installation; users may still install manually from Safari's Share menu.

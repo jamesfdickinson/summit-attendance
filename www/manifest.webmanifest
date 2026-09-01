@@ -1,0 +1,26 @@
+{
+  "id": "./",
+  "name": "Summit Leadership Check-In",
+  "short_name": "Summit Check-In",
+  "description": "Family attendance check-in for Summit Leadership Academy.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#3f6087",
+  "icons": [
+    {
+      "src": "assets/icons/summit-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/summit-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
