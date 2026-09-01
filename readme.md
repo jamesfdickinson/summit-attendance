@@ -18,11 +18,13 @@ This project is a mobile-friendly web page that allows a parent to check in fami
 
 1. The parent selects their family name.
 2. The page displays the members associated with that family.
-3. No family members are selected automatically. The parent must select everyone who is present each day.
+3. No family members are selected automatically. The parent selects everyone who is present each day. Submitting with no members selected is valid and records that no one from the family is present, allowing an incorrect attendance selection to be fully cleared.
 4. The parent may add optional notes and submit the check-in.
 5. After the check-in is saved, the form is replaced with a clean, full-page confirmation message.
 
 The selected family name and the most recently downloaded family/member list are persisted in the browser with `localStorage`. On later visits, the cached list is displayed immediately while the site refreshes it from Google Sheets in the background.
+
+If the app is closed or backgrounded from the confirmation screen, reopening it returns to a fresh form with the same remembered family already selected. The parent does not need to find their family again, and no members are preselected for the next submission.
 
 ## Same-day check-ins and edits
 

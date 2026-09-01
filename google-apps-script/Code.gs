@@ -53,7 +53,10 @@ function doPost(e) {
 function saveCheckIn_(body) {
   const family = cleanText_(body.family, 150, 'Family name');
   const notes = cleanText_(body.notes || '', MAX_NOTES_LENGTH, 'Notes', true);
-  const submittedMembers = Array.isArray(body.members) ? body.members : [];
+  if (!Array.isArray(body.members)) {
+    throw new Error('Members are invalid.');
+  }
+  const submittedMembers = body.members;
   const familyMap = getFamilyMap_();
   assertKnownFamily_(family, familyMap);
 
@@ -68,10 +71,6 @@ function saveCheckIn_(body) {
       members.push(member);
     }
   });
-
-  if (members.length === 0) {
-    throw new Error('Select at least one family member.');
-  }
 
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);

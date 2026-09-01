@@ -16,7 +16,6 @@
     family: document.getElementById("family-select"),
     membersField: document.getElementById("members-field"),
     memberGrid: document.getElementById("member-grid"),
-    membersError: document.getElementById("members-error"),
     notesField: document.getElementById("notes-field"),
     notes: document.getElementById("notes"),
     notesCount: document.getElementById("notes-count"),
@@ -27,7 +26,6 @@
     errorMessage: document.getElementById("error-message"),
     retry: document.getElementById("retry-button"),
     actionBar: document.getElementById("action-bar"),
-    cancel: document.getElementById("cancel-button"),
     submit: document.getElementById("submit-button"),
     submitLabel: document.querySelector("#submit-button .button-label"),
     successPage: document.getElementById("success-page"),
@@ -44,6 +42,7 @@
   };
 
   let deferredInstallPrompt = null;
+  let resetConfirmationOnResume = false;
 
   const demoFamilies = [
     { name: "Dickinson, L", members: ["Lisa", "Abby", "Noah", "Hannah", "Andrew"] },
@@ -192,10 +191,8 @@
 
   function setFormControls() {
     const hasFamily = state.families.has(elements.family.value);
-    const selectedCount = elements.memberGrid.querySelectorAll("input:checked").length;
-    const disabled = state.loadingFamily || state.saving || !hasFamily || selectedCount === 0;
+    const disabled = state.loadingFamily || state.saving || !hasFamily;
     elements.submit.disabled = disabled;
-    elements.cancel.disabled = state.loadingFamily || state.saving || !hasFamily;
     elements.family.disabled = state.saving || state.families.size === 0;
   }
 
@@ -330,7 +327,6 @@
   function loadSelectedFamily() {
     const family = elements.family.value;
     clearError();
-    elements.membersError.hidden = true;
     state.record = null;
     elements.membersField.hidden = true;
     elements.notesField.hidden = true;
@@ -357,18 +353,6 @@
     return Array.from(elements.memberGrid.querySelectorAll("input:checked"), (input) => input.value);
   }
 
-  function resetCurrentForm() {
-    elements.membersError.hidden = true;
-    const selected = state.record?.members || [];
-    elements.memberGrid.querySelectorAll("input").forEach((input) => {
-      input.checked = selected.includes(input.value);
-    });
-    elements.notes.value = state.record?.notes || "";
-    updateNotesCount();
-    setFormControls();
-    elements.family.focus();
-  }
-
   function updateNotesCount() {
     elements.notesCount.textContent = String(elements.notes.value.length);
   }
@@ -377,13 +361,6 @@
     event.preventDefault();
     clearError();
     const members = selectedMembers();
-    if (members.length === 0) {
-      elements.membersError.hidden = false;
-      elements.memberGrid.querySelector("input")?.focus();
-      return;
-    }
-
-    elements.membersError.hidden = true;
     setSubmitting(true);
     try {
       const response = await api.save({
@@ -403,7 +380,9 @@
 
   function showSuccess(record) {
     elements.successFamily.textContent = record.family;
-    elements.successMembers.textContent = `${record.members.join(", ")} ${record.members.length === 1 ? "is" : "are"} checked in.`;
+    elements.successMembers.textContent = record.members.length === 0
+      ? "No family members are marked present."
+      : `${record.members.join(", ")} ${record.members.length === 1 ? "is" : "are"} checked in.`;
     elements.formPage.hidden = true;
     elements.actionBar.hidden = true;
     elements.successPage.hidden = false;
@@ -428,7 +407,6 @@
     elements.membersField.hidden = true;
     elements.notesField.hidden = true;
     elements.notes.value = "";
-    elements.membersError.hidden = true;
     clearError();
     updateNotesCount();
     showForm();
@@ -436,14 +414,21 @@
     setFormControls();
   }
 
+  function returnToRememberedFamily() {
+    showForm();
+    if (state.families.has(elements.family.value)) {
+      loadSelectedFamily();
+    } else if (!selectRememberedFamily()) {
+      elements.family.focus();
+    }
+  }
+
   elements.family.addEventListener("change", loadSelectedFamily);
   elements.memberGrid.addEventListener("change", () => {
-    elements.membersError.hidden = selectedMembers().length > 0;
     setFormControls();
   });
   elements.notes.addEventListener("input", updateNotesCount);
   elements.form.addEventListener("submit", submitCheckIn);
-  elements.cancel.addEventListener("click", resetCurrentForm);
   elements.retry.addEventListener("click", loadFamilies);
   elements.anotherFamily.addEventListener("click", startAnotherFamily);
 
@@ -468,6 +453,26 @@
   window.addEventListener("appinstalled", () => {
     deferredInstallPrompt = null;
     elements.install.hidden = true;
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && !elements.successPage.hidden) {
+      resetConfirmationOnResume = true;
+    } else if (!document.hidden && resetConfirmationOnResume) {
+      resetConfirmationOnResume = false;
+      returnToRememberedFamily();
+    }
+  });
+
+  window.addEventListener("pagehide", () => {
+    if (!elements.successPage.hidden) resetConfirmationOnResume = true;
+  });
+
+  window.addEventListener("pageshow", () => {
+    if (resetConfirmationOnResume) {
+      resetConfirmationOnResume = false;
+      returnToRememberedFamily();
+    }
   });
 
   loadFamilies();

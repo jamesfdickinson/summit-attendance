@@ -203,6 +203,19 @@ assert.equal(checkInsSheet.getLastRow(), 2, "same-day update must not append a r
 assert.equal(checkInsSheet.rows[1][3], "Noah");
 assert.equal(checkInsSheet.rows[1][4], "Changed attendance");
 
+const cleared = post({
+  action: "save",
+  family: "Dickinson, L",
+  members: [],
+  notes: "Attendance cleared"
+});
+assert.equal(cleared.ok, true);
+assert.equal(cleared.updated, true);
+assert.equal(cleared.record.checkInId, created.record.checkInId);
+assert.deepEqual(JSON.parse(JSON.stringify(cleared.record.members)), []);
+assert.equal(checkInsSheet.rows[1][3], "");
+assert.equal(checkInsSheet.getLastRow(), 2);
+
 const rejected = post({
   action: "save",
   family: "Dickinson, L",

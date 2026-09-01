@@ -21,7 +21,8 @@
     <div class="app-shell" id="app-shell">
       <button class="install-button" id="install-button" type="button" aria-label="Install Summit Check-In" title="Install app" hidden>
         <svg aria-hidden="true" viewBox="0 0 24 24">
-          <path d="M11 3h2v9.17l3.59-3.58L18 10l-6 6-6-6 1.41-1.41L11 12.17V3Zm-6 15h14v3H5v-3Z"/>
+          <rect x="3" y="3" width="18" height="18" rx="4"/>
+          <path d="M12 8v8M8 12h8"/>
         </svg>
       </button>
 
@@ -61,9 +62,8 @@
 
             <fieldset class="field members-field" id="members-field" hidden>
               <legend>Members present</legend>
-              <p class="field-help" id="member-help">Select everyone who is here today.</p>
+              <p class="field-help" id="member-help">Select everyone who is here, or leave all unselected to record no one present.</p>
               <div class="member-grid" id="member-grid" aria-describedby="member-help"></div>
-              <p class="field-error" id="members-error" role="alert" hidden>Select at least one family member.</p>
             </fieldset>
 
             <div class="field" id="notes-field" hidden>
@@ -81,7 +81,6 @@
       </main>
 
       <footer class="action-bar" id="action-bar">
-        <button class="secondary-button" id="cancel-button" type="button" disabled>Cancel</button>
         <button class="primary-button" id="submit-button" type="submit" form="check-in-form" disabled>
           <span class="button-label">Check In</span>
           <span class="button-spinner" aria-hidden="true"></span>
