@@ -4,6 +4,7 @@
   const STORAGE_KEY = "summit-check-in-family";
   const FAMILY_DATA_STORAGE_KEY = "summit-check-in-families-v1";
   const DEMO_STORAGE_KEY = "summit-check-in-demo-records";
+  const VISITOR_FAMILY = "Visitor";
   const config = window.SUMMIT_CONFIG || {};
   const endpoint = String(config.API_URL || "").trim();
   const isDemo = new URLSearchParams(window.location.search).get("demo") === "1";
@@ -11,11 +12,14 @@
 
   const elements = {
     formPage: document.getElementById("form-page"),
+    adminLink: document.getElementById("admin-link"),
     install: document.getElementById("install-button"),
     form: document.getElementById("check-in-form"),
     family: document.getElementById("family-select"),
     membersField: document.getElementById("members-field"),
     memberGrid: document.getElementById("member-grid"),
+    visitorField: document.getElementById("visitor-field"),
+    visitorNames: document.getElementById("visitor-names"),
     notesField: document.getElementById("notes-field"),
     notes: document.getElementById("notes"),
     notesCount: document.getElementById("notes-count"),
@@ -51,6 +55,10 @@
   ];
 
   const api = isDemo ? createDemoApi() : createLiveApi();
+
+  if (isDemo) {
+    elements.adminLink.href = "admin.html?demo=1";
+  }
 
   function createLiveApi() {
     async function request(action, options) {
@@ -112,15 +120,16 @@
       getFamilies: () => delay({ ok: true, families: demoFamilies }),
       save: (payload) => {
         const records = getRecords();
-        const hadExistingRecord = Boolean(records[payload.family]);
+        const existingRecord = payload.family === VISITOR_FAMILY ? null : records[payload.family];
+        const hadExistingRecord = Boolean(existingRecord);
         const record = {
-          checkInId: records[payload.family]?.checkInId || crypto.randomUUID(),
+          checkInId: existingRecord?.checkInId || crypto.randomUUID(),
           timestamp: new Date().toISOString(),
           family: payload.family,
           members: payload.members,
           notes: payload.notes
         };
-        records[payload.family] = record;
+        records[payload.family === VISITOR_FAMILY ? record.checkInId : payload.family] = record;
         localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(records));
         return delay({ ok: true, record, updated: hadExistingRecord });
       }
@@ -190,8 +199,10 @@
   }
 
   function setFormControls() {
+    const isVisitor = elements.family.value === VISITOR_FAMILY;
     const hasFamily = state.families.has(elements.family.value);
-    const disabled = state.loadingFamily || state.saving || !hasFamily;
+    const hasVisitorNames = visitorMembers().length > 0;
+    const disabled = state.loadingFamily || state.saving || (!hasFamily && !isVisitor) || (isVisitor && !hasVisitorNames);
     elements.submit.disabled = disabled;
     elements.family.disabled = state.saving || state.families.size === 0;
   }
@@ -204,6 +215,7 @@
       : (state.record ? "Update Check-In" : "Check In");
     elements.family.disabled = isSubmitting;
     elements.notes.disabled = isSubmitting;
+    elements.visitorNames.disabled = isSubmitting;
     elements.memberGrid.querySelectorAll("input").forEach((input) => {
       input.disabled = isSubmitting;
     });
@@ -214,6 +226,7 @@
     state.families = new Map(families.map((family) => [family.name, family.members]));
     elements.family.replaceChildren(new Option("Select your family", ""));
     families.forEach((family) => elements.family.add(new Option(family.name, family.name)));
+    elements.family.add(new Option(VISITOR_FAMILY, VISITOR_FAMILY));
     elements.family.disabled = false;
   }
 
@@ -231,10 +244,19 @@
     const currentFamily = elements.family.value;
     const selected = selectedMembers();
     const notes = elements.notes.value;
-    const formWasOpen = !elements.membersField.hidden;
+    const visitorNames = elements.visitorNames.value;
+    const formWasOpen = !elements.notesField.hidden;
 
     renderFamilies(families);
-    if (currentFamily && state.families.has(currentFamily)) {
+    if (currentFamily === VISITOR_FAMILY) {
+      elements.family.value = currentFamily;
+      if (formWasOpen) {
+        showVisitorFields();
+        elements.visitorNames.value = visitorNames;
+        elements.notes.value = notes;
+        updateNotesCount();
+      }
+    } else if (currentFamily && state.families.has(currentFamily)) {
       elements.family.value = currentFamily;
       if (formWasOpen) {
         const allowed = new Set(state.families.get(currentFamily));
@@ -245,7 +267,9 @@
     } else if (currentFamily) {
       state.record = null;
       elements.membersField.hidden = true;
+      elements.visitorField.hidden = true;
       elements.notesField.hidden = true;
+      elements.visitorNames.value = "";
       elements.notes.value = "";
       updateNotesCount();
     }
@@ -273,6 +297,13 @@
 
     elements.memberGrid.replaceChildren(fragment);
     elements.membersField.hidden = false;
+    elements.notesField.hidden = false;
+  }
+
+  function showVisitorFields() {
+    elements.membersField.hidden = true;
+    elements.memberGrid.replaceChildren();
+    elements.visitorField.hidden = false;
     elements.notesField.hidden = false;
   }
 
@@ -329,10 +360,21 @@
     clearError();
     state.record = null;
     elements.membersField.hidden = true;
+    elements.visitorField.hidden = true;
     elements.notesField.hidden = true;
     elements.memberGrid.replaceChildren();
+    elements.visitorNames.value = "";
     elements.notes.value = "";
     updateNotesCount();
+
+    if (family === VISITOR_FAMILY) {
+      showVisitorFields();
+      elements.submitLabel.textContent = "Check In";
+      setLoading("", false);
+      setFormControls();
+      elements.visitorNames.focus();
+      return;
+    }
 
     if (!state.families.has(family)) {
       setLoading("", false);
@@ -350,7 +392,21 @@
   }
 
   function selectedMembers() {
+    if (elements.family.value === VISITOR_FAMILY) return visitorMembers();
     return Array.from(elements.memberGrid.querySelectorAll("input:checked"), (input) => input.value);
+  }
+
+  function visitorMembers() {
+    const seen = new Set();
+    return elements.visitorNames.value
+      .split(/[\n,]+/)
+      .map((name) => name.trim())
+      .filter((name) => {
+        const key = name.toLocaleLowerCase();
+        if (!name || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
   }
 
   function updateNotesCount() {
@@ -405,7 +461,9 @@
     elements.family.value = "";
     elements.memberGrid.replaceChildren();
     elements.membersField.hidden = true;
+    elements.visitorField.hidden = true;
     elements.notesField.hidden = true;
+    elements.visitorNames.value = "";
     elements.notes.value = "";
     clearError();
     updateNotesCount();
@@ -427,6 +485,7 @@
   elements.memberGrid.addEventListener("change", () => {
     setFormControls();
   });
+  elements.visitorNames.addEventListener("input", setFormControls);
   elements.notes.addEventListener("input", updateNotesCount);
   elements.form.addEventListener("submit", submitCheckIn);
   elements.retry.addEventListener("click", loadFamilies);

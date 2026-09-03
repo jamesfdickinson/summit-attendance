@@ -7,7 +7,8 @@ This project is a mobile-friendly web page that allows a parent to check in fami
 ## Project files
 
 - `www/` — the complete static website
-- `www/config.js` — the deployed Apps Script URL
+- `www/config.js` - the deployed Apps Script URL
+- `www/admin.html` - the administrator attendance reports
 - `www/manifest.webmanifest` — installable app metadata
 - `google-apps-script/Code.gs` — the bound Google Apps Script endpoint
 - `google-apps-script/appsscript.json` — the Apps Script manifest
@@ -18,6 +19,7 @@ This project is a mobile-friendly web page that allows a parent to check in fami
 
 1. The parent selects their family name.
 2. The page displays the members associated with that family.
+   Visitors can instead choose `Visitor` and enter one or more names separated by commas or new lines.
 3. No family members are selected automatically. The parent selects everyone who is present each day. Submitting with no members selected is valid and records that no one from the family is present, allowing an incorrect attendance selection to be fully cleared.
 4. The parent may add optional notes and submit the check-in.
 5. After the check-in is saved, the form is replaced with a clean, full-page confirmation message.
@@ -46,7 +48,9 @@ Columns:
 - `Member Present`
 - `Notes`
 
-Each selected member is stored on a separate row. All rows from one family submission share the same `CheckInID`, timestamp, family name, and notes. Each new check-in receives a random UUID for `CheckInID`.
+Each selected member is stored on a separate row. All rows from one family submission share the same `CheckInID`, timestamp, family name, and notes. `CheckInID` is the sheet-timezone date plus the family name (for example, `2026-09-03|Dickinson, L`), allowing fast exact lookup and same-day replacement without scanning the attendance columns.
+
+Visitor submissions use `Visitor` as the family name and a unique `CheckInID`, so separate visitor groups checked in on the same day do not replace one another.
 
 ### `Lists` sheet
 
@@ -61,11 +65,16 @@ The family and member choices shown by the site come from this sheet.
 
 The project includes Google Apps Script source code and setup instructions. The sheet owner will copy the script into the Google Sheet's Apps Script project and deploy it as a web app.
 
-The deployed endpoint acts as a limited bridge between the static site and the private Google Sheet. It supports only the operations required to:
+The deployed endpoint acts as a limited bridge between the static site and the private Google Sheet. `Code.gs` reads and writes the spreadsheet to which its Apps Script project is bound; it does not contain or open another spreadsheet ID. It supports only the operations required to:
 
 - Read the family and member list
 - Create a new check-in
 - Update the family's existing check-in for the current day
+- Read current-day and year-to-date Thursday attendance reports
+
+## Admin reports
+
+Open `/www/admin.html` to view the administrator reports. Add `?demo=1` to preview them with browser demo data. The first report shows today's families alphabetically, the percentage of families with at least one member present, and checked-in members versus all listed members. The second report shows each family's Thursday attendance percentage alphabetically. A family receives credit for a Thursday when at least one of its members is present. The denominator is the number of distinct Thursday dates with check-in data stored for the current year; calendar weeks without any data and future weeks are not included.
 
 The endpoint is publicly reachable because the site has no authentication or individual user accounts. The Google Sheet itself remains private, and the endpoint exposes only the limited operations listed above. Submitted families, members, notes, and other fields must be strictly validated by the script before any sheet data is returned or changed.
 

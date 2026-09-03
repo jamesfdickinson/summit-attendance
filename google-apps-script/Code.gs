@@ -1,13 +1,15 @@
 /**
  * Summit Leadership Check-In API
  *
- * This file is intended to be copied into a bound Apps Script project opened
- * from the Summit Google Sheet.
+ * This file is intended to be copied into the Apps Script project bound to the
+ * Summit Google Sheet. All reads and writes use that bound spreadsheet.
  */
 
 const CHECK_INS_SHEET = 'CheckIns';
 const FAMILY_LIST_SHEET = 'Lists';
 const MAX_NOTES_LENGTH = 500;
+const VISITOR_FAMILY = 'Visitor';
+const MAX_VISITORS_PER_CHECK_IN = 25;
 const CACHE_SECONDS = 300;
 const FAMILY_MAP_CACHE_KEY = 'summit-family-map-v1';
 
@@ -27,6 +29,10 @@ function doGet(e) {
 
     if (action === 'families') {
       return jsonResponse_({ ok: true, families: getFamilies_() });
+    }
+
+    if (action === 'reports') {
+      return jsonResponse_({ ok: true, reports: getAttendanceReports_() });
     }
 
     throw new Error('Unknown request.');
@@ -58,19 +64,26 @@ function saveCheckIn_(body) {
   }
   const submittedMembers = body.members;
   const familyMap = getFamilyMap_();
-  assertKnownFamily_(family, familyMap);
+  const isVisitor = family === VISITOR_FAMILY;
+  if (!isVisitor) assertKnownFamily_(family, familyMap);
 
-  const allowedMembers = familyMap[family];
+  const allowedMembers = isVisitor ? null : familyMap[family];
   const members = [];
   submittedMembers.forEach(function (value) {
     const member = cleanText_(value, 150, 'Member name');
-    if (allowedMembers.indexOf(member) === -1) {
+    if (!isVisitor && allowedMembers.indexOf(member) === -1) {
       throw new Error('One or more selected family members are invalid.');
     }
     if (members.indexOf(member) === -1) {
       members.push(member);
     }
   });
+  if (isVisitor && members.length === 0) {
+    throw new Error('Enter at least one visitor name.');
+  }
+  if (isVisitor && members.length > MAX_VISITORS_PER_CHECK_IN) {
+    throw new Error('Too many visitor names were entered.');
+  }
 
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -78,13 +91,11 @@ function saveCheckIn_(body) {
     // Re-check while holding the lock so simultaneous requests cannot create
     // two attendance sets for the same family and day.
     const context = getCheckInContext_();
-    const existingRows = findTodaysCheckInRows_(family, context);
     const now = new Date();
-    let existingId = '';
-    for (let index = existingRows.length - 1; index >= 0 && !existingId; index -= 1) {
-      existingId = String(existingRows[index].values[context.headers.CheckInID] || '').trim();
-    }
-    const checkInId = existingId || Utilities.getUuid();
+    const checkInId = isVisitor
+      ? buildVisitorCheckInId_(now)
+      : buildCheckInId_(family, now);
+    const existingRows = findCheckInRows_(checkInId, context);
 
     writeCheckInRows_(context, existingRows, {
       checkInId: checkInId,
@@ -121,11 +132,9 @@ function writeCheckInRows_(context, existingRows, record) {
   const memberRows = record.members.length > 0 ? record.members : [''];
 
   // Keep the first existing row, remove the rest, then resize the row block to
-  // exactly match the latest submission. Deleting bottom-up keeps row indexes
-  // stable, including when older duplicate data is not contiguous.
-  for (let index = existingRows.length - 1; index >= 1; index -= 1) {
-    sheet.deleteRow(existingRows[index].row);
-  }
+  // exactly match the latest submission. Contiguous rows are deleted in one
+  // Sheets call; separate legacy duplicates are still handled bottom-up.
+  deleteExistingRowsExceptFirst_(sheet, existingRows);
   if (existingRows.length > 0 && memberRows.length > 1) {
     sheet.insertRowsAfter(row, memberRows.length - 1);
   }
@@ -152,6 +161,22 @@ function writeCheckInRows_(context, existingRows, record) {
   range.setValues(rows);
 }
 
+function deleteExistingRowsExceptFirst_(sheet, existingRows) {
+  let index = existingRows.length - 1;
+  while (index >= 1) {
+    const endRow = existingRows[index].row;
+    let startRow = endRow;
+    index -= 1;
+
+    while (index >= 1 && existingRows[index].row === startRow - 1) {
+      startRow = existingRows[index].row;
+      index -= 1;
+    }
+
+    sheet.deleteRows(startRow, endRow - startRow + 1);
+  }
+}
+
 function getFamilies_() {
   const familyMap = getFamilyMap_();
   return Object.keys(familyMap)
@@ -159,6 +184,132 @@ function getFamilies_() {
     .map(function (name) {
       return { name: name, members: familyMap[name] };
     });
+}
+
+function getAttendanceReports_() {
+  const familyMap = getFamilyMap_();
+  const familyNames = Object.keys(familyMap).sort(function (a, b) {
+    return a.localeCompare(b);
+  });
+  const timezone = getSpreadsheet_().getSpreadsheetTimeZone();
+  const now = new Date();
+  const today = Utilities.formatDate(now, timezone, 'yyyy-MM-dd');
+  const year = Number(today.slice(0, 4));
+  let reportStartDate = '';
+  let reportEndDate = '';
+  const reportThursdayDates = Object.create(null);
+  const presentToday = Object.create(null);
+  const membersToday = Object.create(null);
+  const yearlyDatesByFamily = Object.create(null);
+
+  familyNames.forEach(function (family) {
+    membersToday[family] = Object.create(null);
+    yearlyDatesByFamily[family] = Object.create(null);
+  });
+
+  const context = getCheckInContext_();
+  const sheet = context.sheet;
+  const headers = context.headers;
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow >= 2) {
+    const values = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+    values.forEach(function (row) {
+      const family = String(row[headers['Family Name']] || '').trim();
+      const member = String(row[headers['Member Present']] || '').trim();
+      if (!Object.prototype.hasOwnProperty.call(familyMap, family)) return;
+
+      const checkInDate = getCheckInDate_(row, headers, timezone);
+      if (!checkInDate) return;
+
+      if (Number(checkInDate.slice(0, 4)) === year) {
+        if (!reportStartDate || checkInDate < reportStartDate) reportStartDate = checkInDate;
+        if (!reportEndDate || checkInDate > reportEndDate) reportEndDate = checkInDate;
+        if (isWeekday_(checkInDate, 4)) reportThursdayDates[checkInDate] = true;
+      }
+
+      if (!member) return;
+
+      if (checkInDate === today) {
+        presentToday[family] = true;
+        membersToday[family][member] = true;
+      }
+
+      if (Number(checkInDate.slice(0, 4)) === year && isWeekday_(checkInDate, 4)) {
+        yearlyDatesByFamily[family][checkInDate] = true;
+      }
+    });
+  }
+
+  const thursdaysWithData = Object.keys(reportThursdayDates).length;
+
+  const totalFamilies = familyNames.length;
+  const checkedInFamilies = familyNames.filter(function (family) {
+    return presentToday[family] === true;
+  }).length;
+  const totalMembers = familyNames.reduce(function (sum, family) {
+    return sum + familyMap[family].length;
+  }, 0);
+  const checkedInMembers = familyNames.reduce(function (sum, family) {
+    return sum + Object.keys(membersToday[family]).length;
+  }, 0);
+
+  return {
+    generatedAt: now.toISOString(),
+    date: today,
+    year: year,
+    daily: {
+      checkedInFamilies: checkedInFamilies,
+      totalFamilies: totalFamilies,
+      familyPercent: percentage_(checkedInFamilies, totalFamilies),
+      checkedInMembers: checkedInMembers,
+      totalMembers: totalMembers,
+      families: familyNames.map(function (family) {
+        return {
+          name: family,
+          checkedIn: presentToday[family] === true,
+          checkedInMembers: Object.keys(membersToday[family]).length,
+          totalMembers: familyMap[family].length
+        };
+      })
+    },
+    yearly: {
+      startDate: reportStartDate,
+      endDate: reportEndDate,
+      thursdaysWithData: thursdaysWithData,
+      families: familyNames.map(function (family) {
+        const attendedThursdays = Object.keys(yearlyDatesByFamily[family]).length;
+        return {
+          name: family,
+          attendedThursdays: attendedThursdays,
+          totalThursdays: thursdaysWithData,
+          percent: percentage_(attendedThursdays, thursdaysWithData)
+        };
+      })
+    }
+  };
+}
+
+function getCheckInDate_(row, headers, timezone) {
+  const checkInId = String(row[headers.CheckInID] || '').trim();
+  const idMatch = /^(\d{4}-\d{2}-\d{2})\|/.exec(checkInId);
+  if (idMatch) return idMatch[1];
+
+  const timestamp = asDate_(row[headers.Timestamp]);
+  return timestamp ? Utilities.formatDate(timestamp, timezone, 'yyyy-MM-dd') : '';
+}
+
+function isWeekday_(dateText, weekday) {
+  return new Date(dateNumber_(dateText)).getUTCDay() === weekday;
+}
+
+function dateNumber_(dateText) {
+  const parts = dateText.split('-').map(Number);
+  return Date.UTC(parts[0], parts[1] - 1, parts[2]);
+}
+
+function percentage_(value, total) {
+  return total > 0 ? Math.round((value / total) * 100) : 0;
 }
 
 function getFamilyMap_() {
@@ -172,8 +323,9 @@ function getFamilyMap_() {
     }
   }
 
-  const sheet = getSheetWithHeaders_(FAMILY_LIST_SHEET, LIST_HEADERS);
-  const headers = getHeaderMap_(sheet, LIST_HEADERS);
+  const context = getSheetContext_(FAMILY_LIST_SHEET, LIST_HEADERS);
+  const sheet = context.sheet;
+  const headers = context.headers;
   const lastRow = sheet.getLastRow();
   const familyMap = Object.create(null);
 
@@ -194,43 +346,49 @@ function getFamilyMap_() {
   return familyMap;
 }
 
-function findTodaysCheckInRows_(family, existingContext) {
+function findCheckInRows_(checkInId, existingContext) {
   const context = existingContext || getCheckInContext_();
   const sheet = context.sheet;
   const headers = context.headers;
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  const values = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
-  const timezone = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
-  const today = Utilities.formatDate(new Date(), timezone, 'yyyy-MM-dd');
+  // TextFinder performs the exact lookup inside Sheets, avoiding the transfer
+  // and JavaScript scan of every attendance row on each save.
+  const idRange = sheet.getRange(2, headers.CheckInID + 1, lastRow - 1, 1);
+  const matches = idRange
+    .createTextFinder(checkInId)
+    .matchEntireCell(true)
+    .findAll()
+    .map(function (range) { return { row: range.getRow() }; })
+    .sort(function (a, b) { return a.row - b.row; });
 
-  const matches = [];
-  for (let index = 0; index < values.length; index += 1) {
-    const row = values[index];
-    if (String(row[headers['Family Name']] || '').trim() !== family) continue;
-
-    const date = asDate_(row[headers.Timestamp]);
-    if (date && Utilities.formatDate(date, timezone, 'yyyy-MM-dd') === today) {
-      matches.push({ row: index + 2, values: row });
-    }
+  if (matches.length > 0) {
+    matches[0].values = sheet.getRange(matches[0].row, 1, 1, sheet.getLastColumn()).getValues()[0];
   }
 
   return matches;
 }
 
-function getCheckInContext_() {
-  const sheet = getSheetWithHeaders_(CHECK_INS_SHEET, CHECK_IN_HEADERS);
-  return { sheet: sheet, headers: getHeaderMap_(sheet, CHECK_IN_HEADERS) };
+function buildCheckInId_(family, timestamp) {
+  const timezone = getSpreadsheet_().getSpreadsheetTimeZone();
+  return Utilities.formatDate(timestamp, timezone, 'yyyy-MM-dd') + '|' + family;
 }
 
-function getSheetWithHeaders_(name, requiredHeaders) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+function buildVisitorCheckInId_(timestamp) {
+  return buildCheckInId_(VISITOR_FAMILY, timestamp) + '|' + Utilities.getUuid();
+}
+
+function getCheckInContext_() {
+  return getSheetContext_(CHECK_INS_SHEET, CHECK_IN_HEADERS);
+}
+
+function getSheetContext_(name, requiredHeaders) {
+  const sheet = getSpreadsheet_().getSheetByName(name);
   if (!sheet) {
     throw new Error('Required sheet "' + name + '" was not found.');
   }
-  getHeaderMap_(sheet, requiredHeaders);
-  return sheet;
+  return { sheet: sheet, headers: getHeaderMap_(sheet, requiredHeaders) };
 }
 
 function getHeaderMap_(sheet, requiredHeaders) {
@@ -267,6 +425,10 @@ function getHeaderMap_(sheet, requiredHeaders) {
   });
   cache.put(cacheKey, JSON.stringify(map), CACHE_SECONDS);
   return map;
+}
+
+function getSpreadsheet_() {
+  return SpreadsheetApp.getActiveSpreadsheet();
 }
 
 function assertKnownFamily_(family, familyMap) {

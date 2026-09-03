@@ -15,10 +15,17 @@ assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
 assert.match(html, /rel="apple-touch-icon"/);
 assert.match(html, /mobile-web-app-capable/);
 assert.match(html, /id="install-button"[^>]*hidden/);
+assert.match(html, /id="admin-link"[^>]*href="admin\.html"/);
+assert.match(app, /adminLink\.href = "admin\.html\?demo=1"/);
 assert.match(app, /beforeinstallprompt/);
 assert.match(app, /\/Android\/i/);
 assert.match(app, /display-mode: standalone/);
 assert.match(app, /\.prompt\(\)/);
+assert.match(html, /id="visitor-field" hidden/);
+assert.match(html, /id="visitor-names"/);
+assert.match(app, /new Option\(VISITOR_FAMILY, VISITOR_FAMILY\)/);
+assert.match(app, /\.split\(\/\[\\n,\]\+\//);
+assert.match(app, /elements\.visitorNames\.addEventListener\("input", setFormControls\)/);
 
 for (const icon of manifest.icons) {
   const iconPath = path.join(root, icon.src);

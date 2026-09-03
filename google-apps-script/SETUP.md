@@ -1,6 +1,6 @@
 # Google Apps Script setup
 
-The check-in page uses an Apps Script web app to read and update the private [Summit Google Sheet](https://docs.google.com/spreadsheets/d/1oSrf-rjjALNKfC8SonBctnBV4jY7QIv4zQerY3CF7V8/edit). Complete these steps using a Google account with edit access to the sheet.
+The check-in page uses an Apps Script web app bound to the private [Summit Google Sheet](https://docs.google.com/spreadsheets/d/1oSrf-rjjALNKfC8SonBctnBV4jY7QIv4zQerY3CF7V8/edit). The script reads and writes only the spreadsheet to which its Apps Script project is bound. Complete these steps using a Google account with edit access to the new sheet.
 
 ## 1. Verify the sheet
 
@@ -20,7 +20,7 @@ In **File → Settings**, confirm the spreadsheet timezone is correct. Same-day 
 3. Open **Project Settings**, enable **Show "appsscript.json" manifest file in editor**, and copy this project's `appsscript.json` into it. If the sheet is not in Pacific time, change the manifest timezone to match the spreadsheet.
 4. Save the project.
 
-Because the script is opened from the spreadsheet, it is bound to that spreadsheet; no spreadsheet ID needs to be copied into the code.
+Because the script is opened from the new spreadsheet, it is bound to that spreadsheet. No spreadsheet ID is stored in the code.
 
 ## 3. Deploy the web app
 
@@ -56,7 +56,9 @@ Saving code in Apps Script does not update an existing deployment automatically:
 
 The deployment URL normally remains the same.
 
-The endpoint caches the `Lists` data and header locations for up to five minutes to reduce save time. Recent family-list edits may therefore take a few minutes to appear on the check-in page. Each selected member is stored on a separate `CheckIns` row. Re-submitting a family's attendance on the same day replaces all of that family's rows for the day while retaining the existing `CheckInID`.
+The spreadsheet URL is not the web app API URL. Keep the `/exec` deployment URL in `www/config.js`; after changing `Code.gs`, create and deploy a new Apps Script version so that endpoint runs the updated code.
+
+The endpoint caches the `Lists` data and header locations for up to five minutes to reduce save time. Recent family-list edits may therefore take a few minutes to appear on the check-in page. Each selected member is stored on a separate `CheckIns` row. Re-submitting a family's attendance on the same day replaces all of that family's rows for the day. Their shared `CheckInID` contains the sheet-timezone date and family name, enabling an exact single-column lookup.
 
 ## Local preview
 

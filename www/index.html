@@ -19,6 +19,12 @@
   </head>
   <body>
     <div class="app-shell" id="app-shell">
+      <a class="admin-link" id="admin-link" href="admin.html" aria-label="Open attendance reports" title="Attendance reports">
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <path d="M5 20V10M12 20V4M19 20v-7"/>
+        </svg>
+      </a>
+
       <button class="install-button" id="install-button" type="button" aria-label="Install Summit Check-In" title="Install app" hidden>
         <svg aria-hidden="true" viewBox="0 0 24 24">
           <rect x="3" y="3" width="18" height="18" rx="4"/>
@@ -65,6 +71,12 @@
              <div class="member-grid" id="member-grid" aria-describedby="member-help"></div>
             </fieldset>
 
+            <div class="field" id="visitor-field" hidden>
+              <label for="visitor-names">Visitor name or names</label>
+              <textarea id="visitor-names" name="visitorNames" maxlength="1000" rows="3" placeholder="Enter each name, separated by commas or new lines" aria-describedby="visitor-help"></textarea>
+              <p class="field-help" id="visitor-help">Separate multiple visitors with commas or new lines.</p>
+            </div>
+
             <div class="field" id="notes-field" hidden>
               <label for="notes">Notes <span class="optional">Optional</span></label>
               <textarea id="notes" name="notes" maxlength="500" rows="4" placeholder="Anything the Summit team should know?"></textarea>
@@ -98,7 +110,7 @@
           <div class="success-actions">
             <button class="primary-button success-action" id="another-family-button" type="button">
               <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20v-2Z"/></svg>
-              Hom
+              Home
             </button>
           </div>
         </section>

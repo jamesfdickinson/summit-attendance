@@ -34,6 +34,40 @@ class Range {
     return this.values().map((row) => row.map((value) => value == null ? "" : String(value)));
   }
 
+  getRow() {
+    return this.row;
+  }
+
+  createTextFinder(searchText) {
+    const range = this;
+    let entireCell = false;
+    return {
+      matchEntireCell(value) {
+        entireCell = value;
+        return this;
+      },
+      findAll() {
+        const matches = [];
+        range.values().forEach((row, rowOffset) => {
+          row.forEach((value, columnOffset) => {
+            const text = String(value == null ? "" : value);
+            const matched = entireCell ? text === searchText : text.includes(searchText);
+            if (matched) {
+              matches.push(new Range(
+                range.sheet,
+                range.row + rowOffset,
+                range.column + columnOffset,
+                1,
+                1
+              ));
+            }
+          });
+        });
+        return matches;
+      }
+    };
+  }
+
   setNumberFormat() {
     return this;
   }
@@ -83,8 +117,8 @@ class Sheet {
     return new Range(this, row, column, rowCount, columnCount);
   }
 
-  deleteRow(row) {
-    this.rows.splice(row - 1, 1);
+  deleteRows(row, count) {
+    this.rows.splice(row - 1, count);
   }
 
   insertRowsAfter(row, count) {
@@ -140,6 +174,7 @@ const spreadsheet = {
 };
 
 const cacheValues = new Map();
+let activeSpreadsheetRequests = 0;
 const context = vm.createContext({
   console: { log: console.log, error() {} },
   CacheService: {
@@ -159,11 +194,20 @@ const context = vm.createContext({
     getScriptLock: () => ({ waitLock() {}, releaseLock() {} })
   },
   SpreadsheetApp: {
-    getActiveSpreadsheet: () => spreadsheet,
+    openById() {
+      throw new Error("The endpoint must use its bound spreadsheet.");
+    },
+    getActiveSpreadsheet() {
+      activeSpreadsheetRequests += 1;
+      return spreadsheet;
+    }
   },
   Utilities: {
-    getUuid: () => "11111111-2222-4333-8444-555555555555",
-    formatDate: (date) => date.toISOString().slice(0, 10)
+    formatDate: (date) => date.toISOString().slice(0, 10),
+    getUuid: (() => {
+      let value = 0;
+      return () => `visitor-${value += 1}`;
+    })()
   }
 });
 
@@ -195,7 +239,7 @@ const created = post({
 });
 assert.equal(created.ok, true, created.error);
 assert.equal(created.updated, false);
-assert.equal(created.record.checkInId, "11111111-2222-4333-8444-555555555555");
+assert.match(created.record.checkInId, /^\d{4}-\d{2}-\d{2}\|Dickinson, L$/);
 assert.equal(checkInsSheet.getLastRow(), 3);
 assert.equal(checkInsSheet.rows[1][3], "Lisa");
 assert.equal(checkInsSheet.rows[2][3], "Abby");
@@ -229,6 +273,30 @@ assert.deepEqual(checkInsSheet.rows.slice(1).map((row) => row[3]), ["Lisa", "Abb
 assert.ok(checkInsSheet.rows.slice(1).every((row) => row[0] === created.record.checkInId));
 assert.ok(checkInsSheet.rows.slice(1).every((row) => row[4] === "Everyone arrived"));
 
+const populatedReports = get("reports");
+assert.equal(populatedReports.ok, true, populatedReports.error);
+assert.equal(populatedReports.reports.daily.checkedInFamilies, 1);
+assert.equal(populatedReports.reports.daily.totalFamilies, 1);
+assert.equal(populatedReports.reports.daily.familyPercent, 100);
+assert.equal(populatedReports.reports.daily.checkedInMembers, 3);
+assert.equal(populatedReports.reports.daily.totalMembers, 3);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(populatedReports.reports.daily.families)),
+  [{ name: "Dickinson, L", checkedIn: true, checkedInMembers: 3, totalMembers: 3 }]
+);
+const reportDate = new Date(`${populatedReports.reports.date}T12:00:00Z`);
+const expectedAttendedThursdays = reportDate.getUTCDay() === 4 ? 1 : 0;
+assert.equal(populatedReports.reports.yearly.startDate, populatedReports.reports.date);
+assert.equal(populatedReports.reports.yearly.endDate, populatedReports.reports.date);
+assert.equal(populatedReports.reports.yearly.thursdaysWithData, expectedAttendedThursdays);
+assert.equal(populatedReports.reports.yearly.families[0].attendedThursdays, expectedAttendedThursdays);
+assert.equal(
+  populatedReports.reports.yearly.families[0].percent,
+  populatedReports.reports.yearly.thursdaysWithData
+    ? Math.round(expectedAttendedThursdays / populatedReports.reports.yearly.thursdaysWithData * 100)
+    : 0
+);
+
 const cleared = post({
   action: "save",
   family: "Dickinson, L",
@@ -242,6 +310,11 @@ assert.deepEqual(JSON.parse(JSON.stringify(cleared.record.members)), []);
 assert.equal(checkInsSheet.rows[1][3], "");
 assert.equal(checkInsSheet.getLastRow(), 2);
 
+const clearedReports = get("reports");
+assert.equal(clearedReports.reports.daily.checkedInFamilies, 0);
+assert.equal(clearedReports.reports.daily.checkedInMembers, 0);
+assert.equal(clearedReports.reports.yearly.families[0].attendedThursdays, 0);
+
 const rejected = post({
   action: "save",
   family: "Dickinson, L",
@@ -250,5 +323,56 @@ const rejected = post({
 });
 assert.equal(rejected.ok, false);
 assert.equal(checkInsSheet.getLastRow(), 2);
+assert.ok(activeSpreadsheetRequests > 0);
+
+const visitors = post({
+  action: "save",
+  family: "Visitor",
+  members: ["Jamie Guest", "Taylor Guest"],
+  notes: "First visit"
+});
+assert.equal(visitors.ok, true, visitors.error);
+assert.equal(visitors.updated, false);
+assert.match(visitors.record.checkInId, /^\d{4}-\d{2}-\d{2}\|Visitor\|visitor-1$/);
+assert.deepEqual(JSON.parse(JSON.stringify(visitors.record.members)), ["Jamie Guest", "Taylor Guest"]);
+assert.deepEqual(checkInsSheet.rows.slice(2).map((row) => row[3]), ["Jamie Guest", "Taylor Guest"]);
+
+const anotherVisitor = post({
+  action: "save",
+  family: "Visitor",
+  members: ["Morgan Guest"],
+  notes: ""
+});
+assert.equal(anotherVisitor.ok, true, anotherVisitor.error);
+assert.notEqual(anotherVisitor.record.checkInId, visitors.record.checkInId);
+assert.equal(checkInsSheet.rows.at(-1)[3], "Morgan Guest");
+
+const emptyVisitor = post({
+  action: "save",
+  family: "Visitor",
+  members: [],
+  notes: ""
+});
+assert.equal(emptyVisitor.ok, false);
+
+const currentReportYear = populatedReports.reports.year;
+const firstThursday = new Date(Date.UTC(currentReportYear, 0, 1));
+while (firstThursday.getUTCDay() !== 4) {
+  firstThursday.setUTCDate(firstThursday.getUTCDate() + 1);
+}
+const thirdThursday = new Date(firstThursday);
+thirdThursday.setUTCDate(thirdThursday.getUTCDate() + 14);
+const firstThursdayText = firstThursday.toISOString().slice(0, 10);
+const thirdThursdayText = thirdThursday.toISOString().slice(0, 10);
+checkInsSheet.rows.splice(1);
+checkInsSheet.rows.push(
+  [`${firstThursdayText}|Dickinson, L`, firstThursday, "Dickinson, L", "Lisa", ""],
+  [`${thirdThursdayText}|Dickinson, L`, thirdThursday, "Dickinson, L", "", ""]
+);
+const distinctWeekReports = get("reports");
+assert.equal(distinctWeekReports.reports.yearly.thursdaysWithData, 2);
+assert.equal(distinctWeekReports.reports.yearly.families[0].attendedThursdays, 1);
+assert.equal(distinctWeekReports.reports.yearly.families[0].totalThursdays, 2);
+assert.equal(distinctWeekReports.reports.yearly.families[0].percent, 50);
 
 console.log("Apps Script integration tests passed.");

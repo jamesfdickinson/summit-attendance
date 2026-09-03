@@ -46,6 +46,7 @@ select {
 }
 
 button:focus-visible,
+.admin-link:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 input:focus-visible + span {
@@ -63,11 +64,11 @@ input:focus-visible + span {
   padding-bottom: calc(84px + env(safe-area-inset-bottom));
 }
 
-.install-button {
+.install-button,
+.admin-link {
   position: fixed;
   z-index: 15;
   top: max(12px, env(safe-area-inset-top));
-  right: 14px;
   display: grid;
   width: 42px;
   height: 42px;
@@ -82,13 +83,23 @@ input:focus-visible + span {
   backdrop-filter: blur(8px);
 }
 
-.install-button:hover {
+.install-button {
+  right: 14px;
+}
+
+.admin-link {
+  left: 14px;
+}
+
+.install-button:hover,
+.admin-link:hover {
   color: #fff;
   border-color: var(--brand);
   background: var(--brand);
 }
 
-.install-button svg {
+.install-button svg,
+.admin-link svg {
   width: 22px;
   fill: none;
   stroke: currentColor;
@@ -236,6 +247,10 @@ select:disabled {
   margin: -4px 0 14px;
   color: var(--muted);
   font-size: 0.875rem;
+}
+
+#visitor-field .field-help {
+  margin: 8px 0 0;
 }
 
 .member-grid {
