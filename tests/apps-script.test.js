@@ -5,6 +5,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
+let numberFormatWrites = 0;
+let insertedRowCount = 0;
+let deletedRowCount = 0;
+
 class Range {
   constructor(sheet, row, column, rowCount, columnCount) {
     this.sheet = sheet;
@@ -73,6 +77,7 @@ class Range {
   }
 
   setNumberFormats() {
+    numberFormatWrites += 1;
     return this;
   }
 
@@ -118,10 +123,12 @@ class Sheet {
   }
 
   deleteRows(row, count) {
+    deletedRowCount += count;
     this.rows.splice(row - 1, count);
   }
 
   insertRowsAfter(row, count) {
+    insertedRowCount += count;
     this.rows.splice(row, 0, ...Array.from({ length: count }, () => []));
   }
 
@@ -198,8 +205,7 @@ const context = vm.createContext({
       return {
         getProperty(key) {
           return {
-            SUMMIT_ACCESS_PASSWORD: "basic-secret",
-            SUMMIT_ADMIN_PASSWORD: "admin-secret"
+            SUMMIT_ACCESS_PASSWORD: "basic-secret"
           }[key] || null;
         }
       };
@@ -224,19 +230,21 @@ const context = vm.createContext({
 });
 
 const codePath = path.join(__dirname, "..", "google-apps-script", "Code.gs");
-vm.runInContext(fs.readFileSync(codePath, "utf8"), context, { filename: codePath });
+const code = fs.readFileSync(codePath, "utf8");
+assert.doesNotMatch(code, /SUMMIT_ADMIN_PASSWORD/);
+vm.runInContext(code, context, { filename: codePath });
 
 function get(action, parameters) {
-  const defaultPassword = action === "reports" ? "admin-secret" : "basic-secret";
   const output = context.doGet({
-    parameter: Object.assign({ action, password: defaultPassword }, parameters || {})
+    parameter: Object.assign({ action, password: "basic-secret" }, parameters || {})
   });
   return JSON.parse(output.getContent());
 }
 
 function post(payload, password) {
+  const submittedPassword = password === undefined ? "basic-secret" : password;
   const output = context.doPost({
-    postData: { contents: JSON.stringify(Object.assign({ password: password || "basic-secret" }, payload)) }
+    postData: { contents: JSON.stringify(Object.assign({ password: submittedPassword }, payload)) }
   });
   return JSON.parse(output.getContent());
 }
@@ -249,21 +257,21 @@ const wrongPassword = get("families", { password: "wrong" });
 assert.equal(wrongPassword.ok, false);
 assert.equal(wrongPassword.code, "AUTH_REQUIRED");
 
-const basicReports = get("reports", { password: "basic-secret" });
-assert.equal(basicReports.ok, false);
-assert.equal(basicReports.code, "AUTH_REQUIRED");
+const publicReports = get("reports", { password: "" });
+assert.equal(publicReports.ok, true);
+assert.equal(publicReports.accessLevel, undefined);
 
 const adminFamilies = get("families", { password: "admin-secret" });
-assert.equal(adminFamilies.ok, true);
-assert.equal(adminFamilies.accessLevel, "admin");
+assert.equal(adminFamilies.ok, false);
+assert.equal(adminFamilies.code, "AUTH_REQUIRED");
 
 const postedFamilies = post({ action: "families" });
 assert.equal(postedFamilies.ok, true);
 assert.equal(postedFamilies.accessLevel, "basic");
 
-const postedReports = post({ action: "reports" }, "admin-secret");
+const postedReports = post({ action: "reports" }, "");
 assert.equal(postedReports.ok, true);
-assert.equal(postedReports.accessLevel, "admin");
+assert.equal(postedReports.accessLevel, undefined);
 
 const families = get("families");
 assert.equal(families.ok, true);
@@ -275,6 +283,7 @@ assert.deepEqual(JSON.parse(JSON.stringify(families.families)), [{
 
 const created = post({
   action: "save",
+  submissionId: "family-submit-1",
   family: "Dickinson, L",
   members: ["Lisa", "Abby"],
   notes: "First arrival"
@@ -287,6 +296,28 @@ assert.equal(checkInsSheet.rows[1][3], "Lisa");
 assert.equal(checkInsSheet.rows[2][3], "Abby");
 assert.equal(checkInsSheet.rows[1][0], created.record.checkInId);
 assert.equal(checkInsSheet.rows[2][0], created.record.checkInId);
+
+const createdStatus = post({
+  action: "status",
+  submissionId: "family-submit-1",
+  family: "Dickinson, L",
+  members: ["Abby", "Lisa"],
+  notes: "First arrival"
+});
+assert.equal(createdStatus.ok, true, createdStatus.error);
+assert.equal(createdStatus.saved, true);
+assert.equal(createdStatus.record.checkInId, created.record.checkInId);
+
+const mismatchedStatus = post({
+  action: "status",
+  submissionId: "family-submit-1",
+  family: "Dickinson, L",
+  members: ["Noah"],
+  notes: "First arrival"
+});
+assert.equal(mismatchedStatus.ok, true);
+assert.equal(mismatchedStatus.saved, false);
+assert.equal(mismatchedStatus.record, null);
 
 const updated = post({
   action: "save",
@@ -315,9 +346,25 @@ assert.deepEqual(checkInsSheet.rows.slice(1).map((row) => row[3]), ["Lisa", "Abb
 assert.ok(checkInsSheet.rows.slice(1).every((row) => row[0] === created.record.checkInId));
 assert.ok(checkInsSheet.rows.slice(1).every((row) => row[4] === "Everyone arrived"));
 
+checkInsSheet.rows[1][5] = "keep this column";
+const insertsBeforeSameSizeUpdate = insertedRowCount;
+const deletesBeforeSameSizeUpdate = deletedRowCount;
+const sameSizeUpdate = post({
+  action: "save",
+  submissionId: "family-submit-2",
+  family: "Dickinson, L",
+  members: ["Lisa", "Abby", "Noah"],
+  notes: "Same row count"
+});
+assert.equal(sameSizeUpdate.ok, true, sameSizeUpdate.error);
+assert.equal(insertedRowCount, insertsBeforeSameSizeUpdate, "same-size updates must not insert rows");
+assert.equal(deletedRowCount, deletesBeforeSameSizeUpdate, "same-size updates must not delete rows");
+assert.equal(checkInsSheet.rows[1][5], "keep this column", "unrelated columns must not be overwritten");
+assert.equal(numberFormatWrites, 0, "saves must not reformat the sheet");
+
 const populatedReports = get("reports");
 assert.equal(populatedReports.ok, true, populatedReports.error);
-assert.equal(populatedReports.accessLevel, "admin");
+assert.equal(populatedReports.accessLevel, undefined);
 assert.equal(populatedReports.reports.daily.checkedInFamilies, 1);
 assert.equal(populatedReports.reports.daily.totalFamilies, 1);
 assert.equal(populatedReports.reports.daily.familyPercent, 100);
@@ -370,18 +417,44 @@ assert.ok(activeSpreadsheetRequests > 0);
 
 const visitors = post({
   action: "save",
+  submissionId: "visitor-submit-1",
   family: "Visitor",
   members: ["Jamie Guest", "Taylor Guest"],
   notes: "First visit"
 });
 assert.equal(visitors.ok, true, visitors.error);
 assert.equal(visitors.updated, false);
-assert.match(visitors.record.checkInId, /^\d{4}-\d{2}-\d{2}\|Visitor\|visitor-1$/);
+assert.match(visitors.record.checkInId, /^\d{4}-\d{2}-\d{2}\|Visitor\|visitor-submit-1$/);
 assert.deepEqual(JSON.parse(JSON.stringify(visitors.record.members)), ["Jamie Guest", "Taylor Guest"]);
 assert.deepEqual(checkInsSheet.rows.slice(2).map((row) => row[3]), ["Jamie Guest", "Taylor Guest"]);
 
+const visitorRowCount = checkInsSheet.getLastRow();
+const retriedVisitor = post({
+  action: "save",
+  submissionId: "visitor-submit-1",
+  family: "Visitor",
+  members: ["Jamie Guest", "Taylor Guest"],
+  notes: "First visit"
+});
+assert.equal(retriedVisitor.ok, true, retriedVisitor.error);
+assert.equal(retriedVisitor.updated, true);
+assert.equal(retriedVisitor.record.checkInId, visitors.record.checkInId);
+assert.equal(checkInsSheet.getLastRow(), visitorRowCount, "visitor retries must not create duplicates");
+
+const visitorStatus = post({
+  action: "status",
+  submissionId: "visitor-submit-1",
+  family: "Visitor",
+  members: ["Taylor Guest", "Jamie Guest"],
+  notes: "First visit"
+});
+assert.equal(visitorStatus.ok, true, visitorStatus.error);
+assert.equal(visitorStatus.saved, true);
+assert.equal(visitorStatus.record.checkInId, visitors.record.checkInId);
+
 const anotherVisitor = post({
   action: "save",
+  submissionId: "visitor-submit-2",
   family: "Visitor",
   members: ["Morgan Guest"],
   notes: ""
@@ -397,6 +470,15 @@ const emptyVisitor = post({
   notes: ""
 });
 assert.equal(emptyVisitor.ok, false);
+
+const invalidSubmissionId = post({
+  action: "save",
+  submissionId: "not valid!",
+  family: "Dickinson, L",
+  members: ["Lisa"],
+  notes: ""
+});
+assert.equal(invalidSubmissionId.ok, false);
 
 const currentReportYear = populatedReports.reports.year;
 const firstThursday = new Date(Date.UTC(currentReportYear, 0, 1));

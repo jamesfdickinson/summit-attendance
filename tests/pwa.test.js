@@ -26,12 +26,16 @@ assert.match(html, /id="access-page"/);
 assert.match(html, /id="access-password"[^>]*type="password"/);
 assert.match(html, /id="app-shell" hidden/);
 assert.match(app, /summit-check-in-access-password/);
+assert.doesNotMatch(app, /summit-check-in-admin-password/);
 assert.match(app, /password: state\.password/);
 assert.match(app, /error\.code === "AUTH_REQUIRED"/);
 assert.match(html, /id="visitor-names"/);
 assert.match(app, /new Option\(VISITOR_FAMILY, VISITOR_FAMILY\)/);
 assert.match(app, /\.split\(\/\[\\n,\]\+\//);
 assert.match(app, /elements\.visitorNames\.addEventListener\("input", setFormControls\)/);
+assert.match(app, /submissionId: createSubmissionId\(\)/);
+assert.match(app, /request\("status"/);
+assert.match(app, /await confirmSaved\(payload\)/);
 
 for (const icon of manifest.icons) {
   const iconPath = path.join(root, icon.src);

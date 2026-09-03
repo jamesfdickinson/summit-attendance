@@ -13,6 +13,8 @@ Column order does not matter, but spelling and capitalization do.
 
 In **File → Settings**, confirm the spreadsheet timezone is correct. Same-day check-ins use this timezone.
 
+Format the complete `Timestamp` column once using **Format → Number → Date time**. The endpoint intentionally does not reapply formatting during every check-in, which removes an unnecessary Sheets operation from the critical save path.
+
 ## 2. Add the script
 
 1. In the spreadsheet, choose **Extensions → Apps Script**.
@@ -22,14 +24,15 @@ In **File → Settings**, confirm the spreadsheet timezone is correct. Same-day 
 
 Because the script is opened from the new spreadsheet, it is bound to that spreadsheet. No spreadsheet ID is stored in the code.
 
-## 3. Set the shared passwords
+## 3. Set the family check-in password
 
-In the Apps Script editor, open **Project Settings** and add these two **Script properties**:
+In the Apps Script editor, open **Project Settings** and add this **Script property**:
 
 - `SUMMIT_ACCESS_PASSWORD`: the shared family check-in password
-- `SUMMIT_ADMIN_PASSWORD`: the administrator password used for reports
 
-Use different, non-empty values. The admin password also unlocks the regular family check-in. Keep both values only in Script properties; do not add them to `Code.gs`, `config.js`, or any website file.
+Use a non-empty value and keep it only in Script properties; do not add it to `Code.gs`, `config.js`, or any website file.
+
+The administrator page uses the client-side password `board26`, defined in `www/admin.js`. There is no server-side administrator password or administrator Script property. Consequently, the reports endpoint is publicly callable by anyone who knows its URL; the client-side password only hides the normal administrator interface.
 
 ## 4. Deploy the web app
 
@@ -65,11 +68,15 @@ Saving code in Apps Script does not update an existing deployment automatically:
 
 The deployment URL normally remains the same.
 
+When publishing this optimized version, deploy `Code.gs` first and the updated `www` files second. The website's recovery check depends on the new `status` action, and visitor retries depend on the server accepting the browser-generated submission ID.
+
 The spreadsheet URL is not the web app API URL. Keep the `/exec` deployment URL in `www/config.js`; after changing `Code.gs`, create and deploy a new Apps Script version so that endpoint runs the updated code.
 
 The endpoint caches the `Lists` data and header locations for up to five minutes to reduce save time. Recent family-list edits may therefore take a few minutes to appear on the check-in page. Each selected member is stored on a separate `CheckIns` row. Re-submitting a family's attendance on the same day replaces all of that family's rows for the day. Their shared `CheckInID` contains the sheet-timezone date and family name, enabling an exact single-column lookup.
 
-The website stores a successfully verified password in that browser's local storage. If the backend rejects it later, the stored value is removed and the password screen returns. Changing either Script property therefore takes effect the next time that browser makes a request. This is a lightweight shared-password gate, not individual user authentication.
+The browser gives every submission a stable ID. If Google commits the sheet update but loses or delays the HTTP response, the browser checks the new `status` action before showing an error. Visitor retries reuse that ID and therefore update the original visitor rows instead of creating duplicates. This recovery behavior does not require another spreadsheet column.
+
+The check-in website stores a successfully verified family password in that browser's local storage. If the backend rejects it later, the stored value is removed and the password screen returns. Changing the Script property therefore takes effect the next time that browser makes a request. The administrator password is checked only in the browser and is requested again after the administrator page is reloaded.
 
 ## Local preview
 

@@ -1,9 +1,8 @@
 (function () {
   "use strict";
 
+  const CLIENT_ADMIN_PASSWORD = "board26";
   const config = window.SUMMIT_CONFIG || {};
-  const ACCESS_PASSWORD_STORAGE_KEY = "summit-check-in-access-password";
-  const ADMIN_PASSWORD_STORAGE_KEY = "summit-check-in-admin-password";
   const endpoint = String(config.API_URL || "").trim();
   const isDemo = new URLSearchParams(window.location.search).get("demo") === "1";
   const hasEndpoint = /^https:\/\/script\.google\.com\/.+\/exec(?:\?.*)?$/i.test(endpoint);
@@ -46,42 +45,7 @@
     elements.accessBack.href = "./?demo=1";
   }
 
-  let password = "";
-
-  function readAdminPassword() {
-    try {
-      return localStorage.getItem(ADMIN_PASSWORD_STORAGE_KEY) || "";
-    } catch (_error) {
-      return "";
-    }
-  }
-
-  function rememberAdminPassword(value) {
-    try {
-      localStorage.setItem(ADMIN_PASSWORD_STORAGE_KEY, value);
-      localStorage.setItem(ACCESS_PASSWORD_STORAGE_KEY, value);
-    } catch (_error) {
-      // Access remains valid for this page load when storage is unavailable.
-    }
-  }
-
-  function forgetAdminPassword(value) {
-    try {
-      if (localStorage.getItem(ADMIN_PASSWORD_STORAGE_KEY) === value) {
-        localStorage.removeItem(ADMIN_PASSWORD_STORAGE_KEY);
-      }
-    } catch (_error) {
-      // The password screen still appears when storage is unavailable.
-    }
-  }
-
-  function isAccessError(error) {
-    return error && (error.code === "AUTH_REQUIRED" || error.code === "AUTH_NOT_CONFIGURED");
-  }
-
   function showAccess(message) {
-    forgetAdminPassword(password);
-    password = "";
     elements.adminPage.hidden = true;
     elements.accessPage.hidden = false;
     elements.accessError.textContent = message || "";
@@ -183,7 +147,7 @@
       cache: "no-store",
       redirect: "follow",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "reports", password })
+      body: JSON.stringify({ action: "reports" })
     });
     if (!response.ok) throw new Error("The reporting service is unavailable. Please try again.");
     const data = await response.json();
@@ -191,9 +155,7 @@
       if (data && data.error === "Unknown request.") {
         throw new Error("The Google Apps Script deployment is out of date. Deploy a new version containing the reports endpoint, then refresh this page.");
       }
-      const error = new Error((data && data.error) || "The reports could not be loaded.");
-      error.code = data && data.code;
-      throw error;
+      throw new Error((data && data.error) || "The reports could not be loaded.");
     }
     return data;
   }
@@ -249,27 +211,17 @@
     };
   }
 
-  async function loadReports(options) {
-    const unlocking = Boolean(options && options.unlocking);
+  async function loadReports() {
     elements.loading.hidden = false;
     elements.error.hidden = true;
     elements.refresh.disabled = true;
     try {
       const response = isDemo
-        ? { reports: getDemoReports(), accessLevel: "admin" }
+        ? { reports: getDemoReports() }
         : await getLiveReports();
       render(response.reports);
       return response;
     } catch (error) {
-      if (isAccessError(error)) {
-        showAccess(error.message);
-        return null;
-      }
-      if (unlocking) {
-        elements.accessError.textContent = error.message;
-        elements.accessError.hidden = false;
-        return null;
-      }
       elements.errorMessage.textContent = error.message;
       elements.error.hidden = false;
       return null;
@@ -284,31 +236,23 @@
     event.preventDefault();
     const enteredPassword = elements.accessPassword.value;
     if (!enteredPassword) return;
-    password = enteredPassword;
+    if (enteredPassword !== CLIENT_ADMIN_PASSWORD) {
+      elements.accessError.textContent = "The password is incorrect. Please try again.";
+      elements.accessError.hidden = false;
+      elements.accessPassword.select();
+      return;
+    }
     elements.accessError.hidden = true;
     elements.accessSubmit.disabled = true;
-    elements.accessSubmit.textContent = "Checking...";
+    elements.accessSubmit.textContent = "Loading...";
     try {
-      const response = await loadReports({ unlocking: true });
-      if (!response) return;
-      rememberAdminPassword(enteredPassword);
       showAdmin();
+      await loadReports();
     } finally {
       elements.accessSubmit.disabled = false;
       elements.accessSubmit.textContent = "View reports";
     }
   });
 
-  if (isDemo) {
-    showAdmin();
-    loadReports();
-  } else {
-    password = readAdminPassword();
-    if (password) {
-      showAdmin();
-      loadReports();
-    } else {
-      showAccess();
-    }
-  }
+  showAccess();
 })();

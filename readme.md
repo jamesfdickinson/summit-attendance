@@ -52,6 +52,8 @@ Each selected member is stored on a separate row. All rows from one family submi
 
 Visitor submissions use `Visitor` as the family name and a unique `CheckInID`, so separate visitor groups checked in on the same day do not replace one another.
 
+Each browser submission also has a stable submission ID. Visitor `CheckInID` values include it, making a retry idempotent. If Google's Apps Script response fails after the sheet update succeeds, the website checks the saved attendance through the endpoint's `status` operation before reporting an error.
+
 ### `Lists` sheet
 
 Columns:
@@ -71,18 +73,19 @@ The deployed endpoint acts as a limited bridge between the static site and the p
 - Create a new check-in
 - Update the family's existing check-in for the current day
 - Read current-day and year-to-date Thursday attendance reports
+- Confirm whether an uncertain submission was already saved
 
 ## Admin reports
 
 Open `/www/admin.html` to view the administrator reports. Add `?demo=1` to preview them with browser demo data. The first report shows today's families alphabetically, the percentage of families with at least one member present, and checked-in members versus all listed members. The second report shows each family's Thursday attendance percentage alphabetically. A family receives credit for a Thursday when at least one of its members is present. The denominator is the number of distinct Thursday dates with check-in data stored for the current year; calendar weeks without any data and future weeks are not included.
 
-## Shared password access
+## Password access
 
-The live endpoint requires a password on every request. Configure `SUMMIT_ACCESS_PASSWORD` and `SUMMIT_ADMIN_PASSWORD` as Apps Script Script properties by following `google-apps-script/SETUP.md`. The family password unlocks check-in only. The admin password unlocks both check-in and the administrator reports.
+Family-list, save, and save-status requests require the server-side `SUMMIT_ACCESS_PASSWORD` Script property described in `google-apps-script/SETUP.md`. The family password is remembered in that browser's local storage and is removed if the backend rejects it.
 
-After the backend verifies a password, the website remembers it in that browser's local storage. An authentication rejection removes the rejected value and shows the password screen again. This is an intentionally lightweight shared-password gate; it does not provide individual accounts, sessions, or strong protection against someone with access to an unlocked browser.
+The administrator page checks the client-side password `board26` in `www/admin.js`. It does not send an administrator password to Apps Script or remember the password after the page reloads. There is no `SUMMIT_ADMIN_PASSWORD` Script property.
 
-The endpoint is publicly reachable and uses shared passwords rather than individual user accounts. The Google Sheet itself remains private, and the endpoint exposes only the limited operations listed above. Submitted families, members, notes, passwords, and other fields must be strictly validated by the script before any sheet data is returned or changed.
+Because a client-side password can be read from the site's source code or bypassed by calling the endpoint directly, the reports operation is not server-protected. The Google Sheet itself remains private, but attendance report data returned by the endpoint is publicly reachable. This arrangement is a convenience gate, not authentication.
 
 ## Setup and preview
 

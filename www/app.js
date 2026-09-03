@@ -5,7 +5,6 @@
   const FAMILY_DATA_STORAGE_KEY = "summit-check-in-families-v1";
   const DEMO_STORAGE_KEY = "summit-check-in-demo-records";
   const ACCESS_PASSWORD_STORAGE_KEY = "summit-check-in-access-password";
-  const ADMIN_PASSWORD_STORAGE_KEY = "summit-check-in-admin-password";
   const VISITOR_FAMILY = "Visitor";
   const config = window.SUMMIT_CONFIG || {};
   const endpoint = String(config.API_URL || "").trim();
@@ -51,7 +50,8 @@
     record: null,
     loadingFamily: false,
     saving: false,
-    password: ""
+    password: "",
+    pendingSubmission: null
   };
 
   let deferredInstallPrompt = null;
@@ -91,7 +91,12 @@
         url += (url.includes("?") ? "&" : "?") + params.toString();
       }
 
-      const response = await fetch(url, fetchOptions);
+      let response;
+      try {
+        response = await fetch(url, fetchOptions);
+      } catch (_error) {
+        throw new Error("The check-in service is unavailable. Please try again.");
+      }
       if (!response.ok) {
         throw new Error("The check-in service is unavailable. Please try again.");
       }
@@ -113,7 +118,8 @@
 
     return {
       getFamilies: () => request("families", { method: "POST" }),
-      save: (payload) => request("save", { method: "POST", body: payload })
+      save: (payload) => request("save", { method: "POST", body: payload }),
+      getStatus: (payload) => request("status", { method: "POST", body: payload })
     };
   }
 
@@ -131,18 +137,26 @@
       getFamilies: () => delay({ ok: true, families: demoFamilies }),
       save: (payload) => {
         const records = getRecords();
-        const existingRecord = payload.family === VISITOR_FAMILY ? null : records[payload.family];
+        const recordKey = payload.family === VISITOR_FAMILY ? payload.submissionId : payload.family;
+        const existingRecord = records[recordKey];
         const hadExistingRecord = Boolean(existingRecord);
         const record = {
-          checkInId: existingRecord?.checkInId || crypto.randomUUID(),
+          checkInId: existingRecord?.checkInId || recordKey,
           timestamp: new Date().toISOString(),
           family: payload.family,
           members: payload.members,
           notes: payload.notes
         };
-        records[payload.family === VISITOR_FAMILY ? record.checkInId : payload.family] = record;
+        records[recordKey] = record;
         localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(records));
         return delay({ ok: true, record, updated: hadExistingRecord });
+      },
+      getStatus: (payload) => {
+        const records = getRecords();
+        const recordKey = payload.family === VISITOR_FAMILY ? payload.submissionId : payload.family;
+        const record = records[recordKey] || null;
+        const saved = Boolean(record) && submissionMatchesRecord(payload, record);
+        return delay({ ok: true, saved, record: saved ? record : null });
       }
     };
   }
@@ -160,10 +174,9 @@
     }
   }
 
-  function storePassword(password, isAdmin) {
+  function storePassword(password) {
     try {
       localStorage.setItem(ACCESS_PASSWORD_STORAGE_KEY, password);
-      if (isAdmin) localStorage.setItem(ADMIN_PASSWORD_STORAGE_KEY, password);
     } catch (_error) {
       // Access remains valid for this page load when storage is unavailable.
     }
@@ -171,9 +184,9 @@
 
   function forgetRejectedPassword(password) {
     try {
-      [ACCESS_PASSWORD_STORAGE_KEY, ADMIN_PASSWORD_STORAGE_KEY].forEach((key) => {
-        if (localStorage.getItem(key) === password) localStorage.removeItem(key);
-      });
+      if (localStorage.getItem(ACCESS_PASSWORD_STORAGE_KEY) === password) {
+        localStorage.removeItem(ACCESS_PASSWORD_STORAGE_KEY);
+      }
     } catch (_error) {
       // The password screen still appears when storage is unavailable.
     }
@@ -490,22 +503,86 @@
     elements.notesCount.textContent = String(elements.notes.value.length);
   }
 
+  function createSubmissionId() {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+    return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+  }
+
+  function sameMembers(left, right) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    const leftSorted = left.slice().sort();
+    const rightSorted = right.slice().sort();
+    return leftSorted.every((member, index) => member === rightSorted[index]);
+  }
+
+  function submissionMatchesRecord(payload, record) {
+    return record.family === payload.family &&
+      record.notes === payload.notes &&
+      sameMembers(record.members, payload.members);
+  }
+
+  function currentSubmission(members) {
+    const draft = {
+      family: elements.family.value,
+      members,
+      notes: elements.notes.value.trim()
+    };
+    const pending = state.pendingSubmission;
+    if (pending && submissionMatchesRecord(draft, pending)) return pending;
+    state.pendingSubmission = Object.assign({ submissionId: createSubmissionId() }, draft);
+    return state.pendingSubmission;
+  }
+
+  async function confirmSaved(payload) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (attempt > 0) {
+        await new Promise((resolve) => window.setTimeout(resolve, 750));
+      }
+      try {
+        const response = await api.getStatus(payload);
+        if (response.saved) return response.record;
+      } catch (error) {
+        if (isAccessError(error)) throw error;
+      }
+    }
+    return null;
+  }
+
   async function submitCheckIn(event) {
     event.preventDefault();
     clearError();
     const members = selectedMembers();
+    const payload = currentSubmission(members);
     setSubmitting(true);
     try {
-      const response = await api.save({
-        family: elements.family.value,
-        members,
-        notes: elements.notes.value.trim()
-      });
+      const response = await api.save(payload);
+      state.pendingSubmission = null;
       state.record = response.record;
       showSuccess(response.record);
     } catch (error) {
       if (isAccessError(error)) {
+        state.pendingSubmission = null;
         showAccess(error.message);
+        return;
+      }
+      elements.submitLabel.textContent = "Confirming.";
+      let confirmedRecord;
+      try {
+        confirmedRecord = await confirmSaved(payload);
+      } catch (confirmationError) {
+        if (isAccessError(confirmationError)) {
+          state.pendingSubmission = null;
+          showAccess(confirmationError.message);
+          return;
+        }
+        confirmedRecord = null;
+      }
+      if (confirmedRecord) {
+        state.pendingSubmission = null;
+        state.record = confirmedRecord;
+        showSuccess(confirmedRecord);
         return;
       }
       showError(error.message, false);
@@ -539,6 +616,7 @@
 
   function startAnotherFamily() {
     state.record = null;
+    state.pendingSubmission = null;
     elements.family.value = "";
     elements.memberGrid.replaceChildren();
     elements.membersField.hidden = true;
@@ -582,7 +660,7 @@
     try {
       const response = await loadFamilies({ unlocking: true });
       if (!response) return;
-      storePassword(password, response.accessLevel === "admin");
+      storePassword(password);
       showApp();
       elements.family.focus();
     } finally {
@@ -638,7 +716,7 @@
     showApp();
     loadFamilies();
   } else {
-    state.password = readStoredPassword(ADMIN_PASSWORD_STORAGE_KEY) || readStoredPassword(ACCESS_PASSWORD_STORAGE_KEY);
+    state.password = readStoredPassword(ACCESS_PASSWORD_STORAGE_KEY);
     if (state.password) {
       showApp();
       loadFamilies();
