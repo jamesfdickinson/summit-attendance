@@ -28,9 +28,9 @@ If the app is closed or backgrounded from the confirmation screen, reopening it 
 
 ## Same-day check-ins and edits
 
-A family may have only one check-in row per day. A day is determined using the Google Sheet's configured timezone.
+A family may have only one check-in attendance set per day. A day is determined using the Google Sheet's configured timezone.
 
-Selecting a family always starts with no members selected and blank notes; the site does not make a separate request to preload today's attendance. When the form is submitted, the endpoint finds that family's current-day check-in. If one exists, it overwrites that row instead of creating another row and retains its existing `CheckInID`.
+Selecting a family always starts with no members selected and blank notes; the site does not make a separate request to preload today's attendance. When the form is submitted, the endpoint finds all of that family's current-day rows. If any exist, it replaces the complete row set and retains the existing `CheckInID`. Submitting no selected members leaves one row with a blank `Member Present` value so the cleared attendance is still recorded.
 
 ## Google Sheets data
 
@@ -43,10 +43,10 @@ Columns:
 - `CheckInID`
 - `Timestamp`
 - `Family Name`
-- `Members Present`
+- `Member Present`
 - `Notes`
 
-Each new check-in receives a random UUID for `CheckInID`.
+Each selected member is stored on a separate row. All rows from one family submission share the same `CheckInID`, timestamp, family name, and notes. Each new check-in receives a random UUID for `CheckInID`.
 
 ### `Lists` sheet
 

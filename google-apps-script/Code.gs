@@ -15,7 +15,7 @@ const CHECK_IN_HEADERS = [
   'CheckInID',
   'Timestamp',
   'Family Name',
-  'Members Present',
+  'Member Present',
   'Notes'
 ];
 
@@ -76,25 +76,27 @@ function saveCheckIn_(body) {
   lock.waitLock(30000);
   try {
     // Re-check while holding the lock so simultaneous requests cannot create
-    // two rows for the same family and day.
+    // two attendance sets for the same family and day.
     const context = getCheckInContext_();
-    const existing = findTodaysCheckInRow_(family, context);
+    const existingRows = findTodaysCheckInRows_(family, context);
     const now = new Date();
-    const existingId = existing ? String(existing.values[existing.headers.CheckInID] || '').trim() : '';
+    let existingId = '';
+    for (let index = existingRows.length - 1; index >= 0 && !existingId; index -= 1) {
+      existingId = String(existingRows[index].values[context.headers.CheckInID] || '').trim();
+    }
     const checkInId = existingId || Utilities.getUuid();
-    const row = existing ? existing.row : context.sheet.getLastRow() + 1;
 
-    writeCheckInRow_(context, row, {
+    writeCheckInRows_(context, existingRows, {
       checkInId: checkInId,
       timestamp: now,
       family: family,
       members: members,
       notes: notes
-    }, existing);
+    });
 
     return {
       ok: true,
-      updated: Boolean(existing),
+      updated: existingRows.length > 0,
       record: {
         checkInId: checkInId,
         timestamp: now.toISOString(),
@@ -108,25 +110,46 @@ function saveCheckIn_(body) {
   }
 }
 
-function writeCheckInRow_(context, row, record, existing) {
+function writeCheckInRows_(context, existingRows, record) {
   const sheet = context.sheet;
   const headers = context.headers;
   const width = sheet.getLastColumn();
-  const values = existing ? existing.values.slice(0, width) : new Array(width).fill('');
-  const formats = new Array(width).fill('@');
+  const row = existingRows.length > 0 ? existingRows[0].row : sheet.getLastRow() + 1;
+  const template = existingRows.length > 0
+    ? existingRows[0].values.slice(0, width)
+    : new Array(width).fill('');
+  const memberRows = record.members.length > 0 ? record.members : [''];
 
-  values[headers.CheckInID] = record.checkInId;
-  values[headers.Timestamp] = record.timestamp;
-  values[headers['Family Name']] = record.family;
-  values[headers['Members Present']] = record.members.join(', ');
-  values[headers.Notes] = record.notes;
-  formats[headers.Timestamp] = 'yyyy-mm-dd hh:mm:ss';
+  // Keep the first existing row, remove the rest, then resize the row block to
+  // exactly match the latest submission. Deleting bottom-up keeps row indexes
+  // stable, including when older duplicate data is not contiguous.
+  for (let index = existingRows.length - 1; index >= 1; index -= 1) {
+    sheet.deleteRow(existingRows[index].row);
+  }
+  if (existingRows.length > 0 && memberRows.length > 1) {
+    sheet.insertRowsAfter(row, memberRows.length - 1);
+  }
+
+  const rows = memberRows.map(function (member) {
+    const values = template.slice();
+    values[headers.CheckInID] = record.checkInId;
+    values[headers.Timestamp] = record.timestamp;
+    values[headers['Family Name']] = record.family;
+    values[headers['Member Present']] = member;
+    values[headers.Notes] = record.notes;
+    return values;
+  });
+  const formats = rows.map(function () {
+    const rowFormats = new Array(width).fill('@');
+    rowFormats[headers.Timestamp] = 'yyyy-mm-dd hh:mm:ss';
+    return rowFormats;
+  });
 
   // Formatting and values are each sent as one batch instead of making a
   // separate Sheets service call for every cell.
-  const range = sheet.getRange(row, 1, 1, width);
-  range.setNumberFormats([formats]);
-  range.setValues([values]);
+  const range = sheet.getRange(row, 1, rows.length, width);
+  range.setNumberFormats(formats);
+  range.setValues(rows);
 }
 
 function getFamilies_() {
@@ -171,29 +194,29 @@ function getFamilyMap_() {
   return familyMap;
 }
 
-function findTodaysCheckInRow_(family, existingContext) {
+function findTodaysCheckInRows_(family, existingContext) {
   const context = existingContext || getCheckInContext_();
   const sheet = context.sheet;
   const headers = context.headers;
   const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return null;
+  if (lastRow < 2) return [];
 
   const values = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
   const timezone = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
   const today = Utilities.formatDate(new Date(), timezone, 'yyyy-MM-dd');
 
-  // Search newest rows first in case historical data already contains a duplicate.
-  for (let index = values.length - 1; index >= 0; index -= 1) {
+  const matches = [];
+  for (let index = 0; index < values.length; index += 1) {
     const row = values[index];
     if (String(row[headers['Family Name']] || '').trim() !== family) continue;
 
     const date = asDate_(row[headers.Timestamp]);
     if (date && Utilities.formatDate(date, timezone, 'yyyy-MM-dd') === today) {
-      return { row: index + 2, values: row, headers: headers };
+      matches.push({ row: index + 2, values: row });
     }
   }
 
-  return null;
+  return matches;
 }
 
 function getCheckInContext_() {

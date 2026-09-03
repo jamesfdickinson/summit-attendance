@@ -83,6 +83,14 @@ class Sheet {
     return new Range(this, row, column, rowCount, columnCount);
   }
 
+  deleteRow(row) {
+    this.rows.splice(row - 1, 1);
+  }
+
+  insertRowsAfter(row, count) {
+    this.rows.splice(row, 0, ...Array.from({ length: count }, () => []));
+  }
+
   valueAt(row, column) {
     return this.rows[row - 1]?.[column - 1] ?? "";
   }
@@ -118,7 +126,7 @@ const checkInsSheet = new Sheet("CheckIns", [[
   "CheckInID",
   "Timestamp",
   "Family Name",
-  "Members Present",
+  "Member Present",
   "Notes"
 ]]);
 
@@ -185,10 +193,14 @@ const created = post({
   members: ["Lisa", "Abby"],
   notes: "First arrival"
 });
-assert.equal(created.ok, true);
+assert.equal(created.ok, true, created.error);
 assert.equal(created.updated, false);
 assert.equal(created.record.checkInId, "11111111-2222-4333-8444-555555555555");
-assert.equal(checkInsSheet.getLastRow(), 2);
+assert.equal(checkInsSheet.getLastRow(), 3);
+assert.equal(checkInsSheet.rows[1][3], "Lisa");
+assert.equal(checkInsSheet.rows[2][3], "Abby");
+assert.equal(checkInsSheet.rows[1][0], created.record.checkInId);
+assert.equal(checkInsSheet.rows[2][0], created.record.checkInId);
 
 const updated = post({
   action: "save",
@@ -199,9 +211,23 @@ const updated = post({
 assert.equal(updated.ok, true);
 assert.equal(updated.updated, true);
 assert.equal(updated.record.checkInId, created.record.checkInId);
-assert.equal(checkInsSheet.getLastRow(), 2, "same-day update must not append a row");
+assert.equal(checkInsSheet.getLastRow(), 2, "same-day update must replace the old member rows");
 assert.equal(checkInsSheet.rows[1][3], "Noah");
 assert.equal(checkInsSheet.rows[1][4], "Changed attendance");
+
+const expanded = post({
+  action: "save",
+  family: "Dickinson, L",
+  members: ["Lisa", "Abby", "Noah"],
+  notes: "Everyone arrived"
+});
+assert.equal(expanded.ok, true);
+assert.equal(expanded.updated, true);
+assert.equal(expanded.record.checkInId, created.record.checkInId);
+assert.equal(checkInsSheet.getLastRow(), 4);
+assert.deepEqual(checkInsSheet.rows.slice(1).map((row) => row[3]), ["Lisa", "Abby", "Noah"]);
+assert.ok(checkInsSheet.rows.slice(1).every((row) => row[0] === created.record.checkInId));
+assert.ok(checkInsSheet.rows.slice(1).every((row) => row[4] === "Everyone arrived"));
 
 const cleared = post({
   action: "save",

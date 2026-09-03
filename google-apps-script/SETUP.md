@@ -1,13 +1,13 @@
 # Google Apps Script setup
 
-The check-in page needs a bound Apps Script web app to read and update the private [Summit Google Sheet](https://docs.google.com/spreadsheets/d/16DMdld_kiRYuFJnISnHFs9dNJUqyapDMuUCnBY9tyrw/edit?gid=0#gid=0). Complete these steps using a Google account with edit access to the sheet.
+The check-in page uses an Apps Script web app to read and update the private [Summit Google Sheet](https://docs.google.com/spreadsheets/d/1oSrf-rjjALNKfC8SonBctnBV4jY7QIv4zQerY3CF7V8/edit). Complete these steps using a Google account with edit access to the sheet.
 
 ## 1. Verify the sheet
 
 Open the existing Summit spreadsheet and confirm it has these exact tab and column names:
 
 - Tab `Lists`: `Family Name`, `Member Name`
-- Tab `CheckIns`: `CheckInID`, `Timestamp`, `Family Name`, `Members Present`, `Notes`
+- Tab `CheckIns`: `CheckInID`, `Timestamp`, `Family Name`, `Member Present`, `Notes`
 
 Column order does not matter, but spelling and capitalization do.
 
@@ -56,7 +56,7 @@ Saving code in Apps Script does not update an existing deployment automatically:
 
 The deployment URL normally remains the same.
 
-The endpoint caches the `Lists` data and header locations for up to five minutes to reduce save time. Recent family-list edits may therefore take a few minutes to appear on the check-in page.
+The endpoint caches the `Lists` data and header locations for up to five minutes to reduce save time. Recent family-list edits may therefore take a few minutes to appear on the check-in page. Each selected member is stored on a separate `CheckIns` row. Re-submitting a family's attendance on the same day replaces all of that family's rows for the day while retaining the existing `CheckInID`.
 
 ## Local preview
 
