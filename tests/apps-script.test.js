@@ -193,6 +193,18 @@ const context = vm.createContext({
   LockService: {
     getScriptLock: () => ({ waitLock() {}, releaseLock() {} })
   },
+  PropertiesService: {
+    getScriptProperties() {
+      return {
+        getProperty(key) {
+          return {
+            SUMMIT_ACCESS_PASSWORD: "basic-secret",
+            SUMMIT_ADMIN_PASSWORD: "admin-secret"
+          }[key] || null;
+        }
+      };
+    }
+  },
   SpreadsheetApp: {
     openById() {
       throw new Error("The endpoint must use its bound spreadsheet.");
@@ -215,17 +227,47 @@ const codePath = path.join(__dirname, "..", "google-apps-script", "Code.gs");
 vm.runInContext(fs.readFileSync(codePath, "utf8"), context, { filename: codePath });
 
 function get(action, parameters) {
-  const output = context.doGet({ parameter: Object.assign({ action }, parameters || {}) });
+  const defaultPassword = action === "reports" ? "admin-secret" : "basic-secret";
+  const output = context.doGet({
+    parameter: Object.assign({ action, password: defaultPassword }, parameters || {})
+  });
   return JSON.parse(output.getContent());
 }
 
-function post(payload) {
-  const output = context.doPost({ postData: { contents: JSON.stringify(payload) } });
+function post(payload, password) {
+  const output = context.doPost({
+    postData: { contents: JSON.stringify(Object.assign({ password: password || "basic-secret" }, payload)) }
+  });
   return JSON.parse(output.getContent());
 }
+
+const missingPassword = get("families", { password: "" });
+assert.equal(missingPassword.ok, false);
+assert.equal(missingPassword.code, "AUTH_REQUIRED");
+
+const wrongPassword = get("families", { password: "wrong" });
+assert.equal(wrongPassword.ok, false);
+assert.equal(wrongPassword.code, "AUTH_REQUIRED");
+
+const basicReports = get("reports", { password: "basic-secret" });
+assert.equal(basicReports.ok, false);
+assert.equal(basicReports.code, "AUTH_REQUIRED");
+
+const adminFamilies = get("families", { password: "admin-secret" });
+assert.equal(adminFamilies.ok, true);
+assert.equal(adminFamilies.accessLevel, "admin");
+
+const postedFamilies = post({ action: "families" });
+assert.equal(postedFamilies.ok, true);
+assert.equal(postedFamilies.accessLevel, "basic");
+
+const postedReports = post({ action: "reports" }, "admin-secret");
+assert.equal(postedReports.ok, true);
+assert.equal(postedReports.accessLevel, "admin");
 
 const families = get("families");
 assert.equal(families.ok, true);
+assert.equal(families.accessLevel, "basic");
 assert.deepEqual(JSON.parse(JSON.stringify(families.families)), [{
   name: "Dickinson, L",
   members: ["Lisa", "Abby", "Noah"]
@@ -275,6 +317,7 @@ assert.ok(checkInsSheet.rows.slice(1).every((row) => row[4] === "Everyone arrive
 
 const populatedReports = get("reports");
 assert.equal(populatedReports.ok, true, populatedReports.error);
+assert.equal(populatedReports.accessLevel, "admin");
 assert.equal(populatedReports.reports.daily.checkedInFamilies, 1);
 assert.equal(populatedReports.reports.daily.totalFamilies, 1);
 assert.equal(populatedReports.reports.daily.familyPercent, 100);

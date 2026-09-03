@@ -4,6 +4,8 @@
   const STORAGE_KEY = "summit-check-in-family";
   const FAMILY_DATA_STORAGE_KEY = "summit-check-in-families-v1";
   const DEMO_STORAGE_KEY = "summit-check-in-demo-records";
+  const ACCESS_PASSWORD_STORAGE_KEY = "summit-check-in-access-password";
+  const ADMIN_PASSWORD_STORAGE_KEY = "summit-check-in-admin-password";
   const VISITOR_FAMILY = "Visitor";
   const config = window.SUMMIT_CONFIG || {};
   const endpoint = String(config.API_URL || "").trim();
@@ -11,6 +13,12 @@
   const hasEndpoint = /^https:\/\/script\.google\.com\/.+\/exec(?:\?.*)?$/i.test(endpoint);
 
   const elements = {
+    appShell: document.getElementById("app-shell"),
+    accessPage: document.getElementById("access-page"),
+    accessForm: document.getElementById("access-form"),
+    accessPassword: document.getElementById("access-password"),
+    accessError: document.getElementById("access-error"),
+    accessSubmit: document.getElementById("access-submit"),
     formPage: document.getElementById("form-page"),
     adminLink: document.getElementById("admin-link"),
     install: document.getElementById("install-button"),
@@ -42,7 +50,8 @@
     families: new Map(),
     record: null,
     loadingFamily: false,
-    saving: false
+    saving: false,
+    password: ""
   };
 
   let deferredInstallPrompt = null;
@@ -76,9 +85,9 @@
 
       if (fetchOptions.method === "POST") {
         fetchOptions.headers = { "Content-Type": "text/plain;charset=utf-8" };
-        fetchOptions.body = JSON.stringify(Object.assign({ action }, requestOptions.body || {}));
+        fetchOptions.body = JSON.stringify(Object.assign({ action, password: state.password }, requestOptions.body || {}));
       } else {
-        const params = new URLSearchParams(Object.assign({ action }, requestOptions.params || {}));
+        const params = new URLSearchParams(Object.assign({ action, password: state.password }, requestOptions.params || {}));
         url += (url.includes("?") ? "&" : "?") + params.toString();
       }
 
@@ -95,13 +104,15 @@
       }
 
       if (!data || data.ok !== true) {
-        throw new Error((data && data.error) || "The request could not be completed.");
+        const error = new Error((data && data.error) || "The request could not be completed.");
+        error.code = data && data.code;
+        throw error;
       }
       return data;
     }
 
     return {
-      getFamilies: () => request("families"),
+      getFamilies: () => request("families", { method: "POST" }),
       save: (payload) => request("save", { method: "POST", body: payload })
     };
   }
@@ -139,6 +150,55 @@
   function setLoading(message, visible) {
     elements.loadingText.textContent = message;
     elements.loadingStatus.hidden = !visible;
+  }
+
+  function readStoredPassword(key) {
+    try {
+      return localStorage.getItem(key) || "";
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function storePassword(password, isAdmin) {
+    try {
+      localStorage.setItem(ACCESS_PASSWORD_STORAGE_KEY, password);
+      if (isAdmin) localStorage.setItem(ADMIN_PASSWORD_STORAGE_KEY, password);
+    } catch (_error) {
+      // Access remains valid for this page load when storage is unavailable.
+    }
+  }
+
+  function forgetRejectedPassword(password) {
+    try {
+      [ACCESS_PASSWORD_STORAGE_KEY, ADMIN_PASSWORD_STORAGE_KEY].forEach((key) => {
+        if (localStorage.getItem(key) === password) localStorage.removeItem(key);
+      });
+    } catch (_error) {
+      // The password screen still appears when storage is unavailable.
+    }
+  }
+
+  function isAccessError(error) {
+    return error && (error.code === "AUTH_REQUIRED" || error.code === "AUTH_NOT_CONFIGURED");
+  }
+
+  function showAccess(message) {
+    forgetRejectedPassword(state.password);
+    state.password = "";
+    elements.appShell.hidden = true;
+    elements.successPage.hidden = true;
+    elements.accessPage.hidden = false;
+    elements.accessError.textContent = message || "";
+    elements.accessError.hidden = !message;
+    elements.accessPassword.value = "";
+    elements.accessPassword.focus();
+  }
+
+  function showApp() {
+    elements.accessPage.hidden = true;
+    elements.appShell.hidden = false;
+    document.body.style.overflow = "";
   }
 
   function readRememberedFamily() {
@@ -307,16 +367,22 @@
     elements.notesField.hidden = false;
   }
 
-  async function loadFamilies() {
+  async function loadFamilies(options) {
+    const unlocking = Boolean(options && options.unlocking);
     clearError();
     elements.setupNotice.hidden = true;
     elements.family.disabled = true;
 
     if (!isDemo && !hasEndpoint) {
       setLoading("", false);
-      elements.setupNotice.hidden = false;
+      if (unlocking) {
+        elements.accessError.textContent = "The Google Apps Script URL has not been configured yet.";
+        elements.accessError.hidden = false;
+      } else {
+        elements.setupNotice.hidden = false;
+      }
       elements.family.replaceChildren(new Option("Setup required", ""));
-      return;
+      return null;
     }
 
     const cachedFamilies = validFamilies(readCachedFamilies());
@@ -344,14 +410,25 @@
       }
       cacheFamilies(families);
       setLoading("", false);
+      return response;
     } catch (error) {
       setLoading("", false);
+      if (isAccessError(error)) {
+        showAccess(error.message);
+        return null;
+      }
+      if (unlocking) {
+        elements.accessError.textContent = error.message;
+        elements.accessError.hidden = false;
+        return null;
+      }
       if (hasCache) {
         showError("Showing the saved family list because the latest list could not be loaded.", true);
       } else {
         showError(error.message, true);
         elements.family.replaceChildren(new Option("Unable to load families", ""));
       }
+      return null;
     }
   }
 
@@ -427,6 +504,10 @@
       state.record = response.record;
       showSuccess(response.record);
     } catch (error) {
+      if (isAccessError(error)) {
+        showAccess(error.message);
+        return;
+      }
       showError(error.message, false);
       elements.errorNotice.scrollIntoView({ behavior: "smooth", block: "center" });
     } finally {
@@ -490,6 +571,25 @@
   elements.form.addEventListener("submit", submitCheckIn);
   elements.retry.addEventListener("click", loadFamilies);
   elements.anotherFamily.addEventListener("click", startAnotherFamily);
+  elements.accessForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const password = elements.accessPassword.value;
+    if (!password) return;
+    state.password = password;
+    elements.accessError.hidden = true;
+    elements.accessSubmit.disabled = true;
+    elements.accessSubmit.textContent = "Checking...";
+    try {
+      const response = await loadFamilies({ unlocking: true });
+      if (!response) return;
+      storePassword(password, response.accessLevel === "admin");
+      showApp();
+      elements.family.focus();
+    } finally {
+      elements.accessSubmit.disabled = false;
+      elements.accessSubmit.textContent = "Continue";
+    }
+  });
 
   window.addEventListener("beforeinstallprompt", (event) => {
     const isAndroid = /Android/i.test(navigator.userAgent);
@@ -534,7 +634,18 @@
     }
   });
 
-  loadFamilies();
+  if (isDemo) {
+    showApp();
+    loadFamilies();
+  } else {
+    state.password = readStoredPassword(ADMIN_PASSWORD_STORAGE_KEY) || readStoredPassword(ACCESS_PASSWORD_STORAGE_KEY);
+    if (state.password) {
+      showApp();
+      loadFamilies();
+    } else {
+      showAccess();
+    }
+  }
 
   // Remove the earlier offline-cache worker. The app requires a live connection
   // and remains installable through its web app manifest.

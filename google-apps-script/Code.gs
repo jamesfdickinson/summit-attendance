@@ -12,6 +12,8 @@ const VISITOR_FAMILY = 'Visitor';
 const MAX_VISITORS_PER_CHECK_IN = 25;
 const CACHE_SECONDS = 300;
 const FAMILY_MAP_CACHE_KEY = 'summit-family-map-v1';
+const ACCESS_PASSWORD_PROPERTY = 'SUMMIT_ACCESS_PASSWORD';
+const ADMIN_PASSWORD_PROPERTY = 'SUMMIT_ADMIN_PASSWORD';
 
 const CHECK_IN_HEADERS = [
   'CheckInID',
@@ -26,34 +28,79 @@ const LIST_HEADERS = ['Family Name', 'Member Name'];
 function doGet(e) {
   try {
     const action = String((e && e.parameter && e.parameter.action) || '').trim();
+    const password = e && e.parameter ? e.parameter.password : '';
 
     if (action === 'families') {
-      return jsonResponse_({ ok: true, families: getFamilies_() });
+      const accessLevel = requireAccess_(password, false);
+      return jsonResponse_({ ok: true, accessLevel: accessLevel, families: getFamilies_() });
     }
 
     if (action === 'reports') {
-      return jsonResponse_({ ok: true, reports: getAttendanceReports_() });
+      requireAccess_(password, true);
+      return jsonResponse_({ ok: true, accessLevel: 'admin', reports: getAttendanceReports_() });
     }
 
     throw new Error('Unknown request.');
   } catch (error) {
     console.error(error);
-    return jsonResponse_({ ok: false, error: publicError_(error) });
+    return errorResponse_(error);
   }
 }
 
 function doPost(e) {
   try {
     const body = parseBody_(e);
-    if (body.action !== 'save') {
-      throw new Error('Unknown request.');
+    if (body.action === 'families') {
+      const accessLevel = requireAccess_(body.password, false);
+      return jsonResponse_({ ok: true, accessLevel: accessLevel, families: getFamilies_() });
     }
 
-    return jsonResponse_(saveCheckIn_(body));
+    if (body.action === 'reports') {
+      requireAccess_(body.password, true);
+      return jsonResponse_({ ok: true, accessLevel: 'admin', reports: getAttendanceReports_() });
+    }
+
+    if (body.action === 'save') {
+      const accessLevel = requireAccess_(body.password, false);
+      const result = saveCheckIn_(body);
+      result.accessLevel = accessLevel;
+      return jsonResponse_(result);
+    }
+
+    throw new Error('Unknown request.');
   } catch (error) {
     console.error(error);
-    return jsonResponse_({ ok: false, error: publicError_(error) });
+    return errorResponse_(error);
   }
+}
+
+function requireAccess_(submittedPassword, adminOnly) {
+  const properties = PropertiesService.getScriptProperties();
+  const accessPassword = properties.getProperty(ACCESS_PASSWORD_PROPERTY);
+  const adminPassword = properties.getProperty(ADMIN_PASSWORD_PROPERTY);
+
+  if (!accessPassword || !adminPassword) {
+    throw codedError_('Access passwords are not configured.', 'AUTH_NOT_CONFIGURED');
+  }
+
+  const password = typeof submittedPassword === 'string' ? submittedPassword : '';
+  if (password === adminPassword) return 'admin';
+  if (!adminOnly && password === accessPassword) return 'basic';
+  throw codedError_('The password is incorrect. Please try again.', 'AUTH_REQUIRED');
+}
+
+function codedError_(message, code) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+function errorResponse_(error) {
+  const payload = { ok: false, error: publicError_(error) };
+  if (error && (error.code === 'AUTH_REQUIRED' || error.code === 'AUTH_NOT_CONFIGURED')) {
+    payload.code = error.code;
+  }
+  return jsonResponse_(payload);
 }
 
 function saveCheckIn_(body) {

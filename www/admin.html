@@ -13,12 +13,31 @@
     <script src="admin.js" defer></script>
   </head>
   <body>
-    <main class="admin-page">
+    <main class="access-page" id="access-page">
+      <section class="access-card" aria-labelledby="access-title">
+        <img src="assets/logo.png" alt="Summit Leadership Academy">
+        <p class="eyebrow">Admin reports</p>
+        <h1 id="access-title">Enter the admin password</h1>
+        <p>Administrator access is required to view attendance reports.</p>
+        <form class="access-form" id="access-form">
+          <label for="access-password">Admin password</label>
+          <input id="access-password" name="password" type="password" autocomplete="current-password" required>
+          <p class="access-error" id="access-error" role="alert" hidden></p>
+          <button class="primary-button" id="access-submit" type="submit">View reports</button>
+          <a class="access-back" id="access-back" href="./">Back to check-in</a>
+        </form>
+      </section>
+    </main>
+
+    <main class="admin-page" id="admin-page" hidden>
       <nav class="admin-topbar" aria-label="Admin navigation">
         <a class="secondary-button back-button" id="back-button" href="./">
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20v-2Z"/></svg>
           Back
         </a>
+        <button class="secondary-button icon-button" id="refresh-button" type="button" aria-label="Refresh reports" title="Refresh reports">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.1A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35Z"/></svg>
+        </button>
       </nav>
 
       <header class="admin-header">
@@ -27,9 +46,6 @@
           <p class="eyebrow">Admin</p>
           <h1>Attendance reports</h1>
           <p id="report-date">Loading current attendance…</p>
-        </div>
-        <div class="admin-actions">
-          <button class="secondary-button" id="refresh-button" type="button">Refresh</button>
         </div>
       </header>
 

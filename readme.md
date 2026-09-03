@@ -76,7 +76,13 @@ The deployed endpoint acts as a limited bridge between the static site and the p
 
 Open `/www/admin.html` to view the administrator reports. Add `?demo=1` to preview them with browser demo data. The first report shows today's families alphabetically, the percentage of families with at least one member present, and checked-in members versus all listed members. The second report shows each family's Thursday attendance percentage alphabetically. A family receives credit for a Thursday when at least one of its members is present. The denominator is the number of distinct Thursday dates with check-in data stored for the current year; calendar weeks without any data and future weeks are not included.
 
-The endpoint is publicly reachable because the site has no authentication or individual user accounts. The Google Sheet itself remains private, and the endpoint exposes only the limited operations listed above. Submitted families, members, notes, and other fields must be strictly validated by the script before any sheet data is returned or changed.
+## Shared password access
+
+The live endpoint requires a password on every request. Configure `SUMMIT_ACCESS_PASSWORD` and `SUMMIT_ADMIN_PASSWORD` as Apps Script Script properties by following `google-apps-script/SETUP.md`. The family password unlocks check-in only. The admin password unlocks both check-in and the administrator reports.
+
+After the backend verifies a password, the website remembers it in that browser's local storage. An authentication rejection removes the rejected value and shows the password screen again. This is an intentionally lightweight shared-password gate; it does not provide individual accounts, sessions, or strong protection against someone with access to an unlocked browser.
+
+The endpoint is publicly reachable and uses shared passwords rather than individual user accounts. The Google Sheet itself remains private, and the endpoint exposes only the limited operations listed above. Submitted families, members, notes, passwords, and other fields must be strictly validated by the script before any sheet data is returned or changed.
 
 ## Setup and preview
 

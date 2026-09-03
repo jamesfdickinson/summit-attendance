@@ -18,7 +18,21 @@
     <script src="app.js" defer></script>
   </head>
   <body>
-    <div class="app-shell" id="app-shell">
+    <main class="access-page" id="access-page">
+      <section class="access-card" aria-labelledby="access-title">
+        <img src="assets/logo.png" alt="Summit Leadership Academy">
+        <p class="eyebrow">Family check-in</p>
+        <h1 id="access-title">Enter password</h1>
+        <form class="access-form" id="access-form">
+          <label for="access-password">Password</label>
+          <input id="access-password" name="password" type="password" autocomplete="current-password" required>
+          <p class="access-error" id="access-error" role="alert" hidden></p>
+          <button class="primary-button" id="access-submit" type="submit">Continue</button>
+        </form>
+      </section>
+    </main>
+
+    <div class="app-shell" id="app-shell" hidden>
       <a class="admin-link" id="admin-link" href="admin.html" aria-label="Open attendance reports" title="Attendance reports">
         <svg aria-hidden="true" viewBox="0 0 24 24">
           <path d="M5 20V10M12 20V4M19 20v-7"/>

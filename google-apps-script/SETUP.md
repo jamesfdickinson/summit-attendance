@@ -22,7 +22,16 @@ In **File → Settings**, confirm the spreadsheet timezone is correct. Same-day 
 
 Because the script is opened from the new spreadsheet, it is bound to that spreadsheet. No spreadsheet ID is stored in the code.
 
-## 3. Deploy the web app
+## 3. Set the shared passwords
+
+In the Apps Script editor, open **Project Settings** and add these two **Script properties**:
+
+- `SUMMIT_ACCESS_PASSWORD`: the shared family check-in password
+- `SUMMIT_ADMIN_PASSWORD`: the administrator password used for reports
+
+Use different, non-empty values. The admin password also unlocks the regular family check-in. Keep both values only in Script properties; do not add them to `Code.gs`, `config.js`, or any website file.
+
+## 4. Deploy the web app
 
 1. Click **Deploy → New deployment**.
 2. Choose **Web app** as the deployment type.
@@ -33,7 +42,7 @@ Because the script is opened from the new spreadsheet, it is bound to that sprea
 
 Use the `/exec` deployment URL, not the temporary `/dev` test URL.
 
-## 4. Connect the website
+## 5. Connect the website
 
 Open `www/config.js` and replace the placeholder with the deployment URL:
 
@@ -59,6 +68,8 @@ The deployment URL normally remains the same.
 The spreadsheet URL is not the web app API URL. Keep the `/exec` deployment URL in `www/config.js`; after changing `Code.gs`, create and deploy a new Apps Script version so that endpoint runs the updated code.
 
 The endpoint caches the `Lists` data and header locations for up to five minutes to reduce save time. Recent family-list edits may therefore take a few minutes to appear on the check-in page. Each selected member is stored on a separate `CheckIns` row. Re-submitting a family's attendance on the same day replaces all of that family's rows for the day. Their shared `CheckInID` contains the sheet-timezone date and family name, enabling an exact single-column lookup.
+
+The website stores a successfully verified password in that browser's local storage. If the backend rejects it later, the stored value is removed and the password screen returns. Changing either Script property therefore takes effect the next time that browser makes a request. This is a lightweight shared-password gate, not individual user authentication.
 
 ## Local preview
 
