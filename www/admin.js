@@ -2,6 +2,7 @@
   "use strict";
 
   const CLIENT_ADMIN_PASSWORD = "board26";
+  const ADMIN_UNLOCK_STORAGE_KEY = "summit-check-in-admin-unlock";
   const config = window.SUMMIT_CONFIG || {};
   const endpoint = String(config.API_URL || "").trim();
   const isDemo = new URLSearchParams(window.location.search).get("demo") === "1";
@@ -45,6 +46,33 @@
     elements.accessBack.href = "./?demo=1";
   }
 
+  function readRememberedUnlock() {
+    try {
+      return localStorage.getItem(ADMIN_UNLOCK_STORAGE_KEY) === CLIENT_ADMIN_PASSWORD;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function rememberUnlock() {
+    try {
+      localStorage.setItem(ADMIN_UNLOCK_STORAGE_KEY, CLIENT_ADMIN_PASSWORD);
+    } catch (_error) {
+      // The reports remain available for this page load when storage is disabled.
+    }
+  }
+
+  function forgetOutdatedUnlock() {
+    try {
+      const saved = localStorage.getItem(ADMIN_UNLOCK_STORAGE_KEY);
+      if (saved && saved !== CLIENT_ADMIN_PASSWORD) {
+        localStorage.removeItem(ADMIN_UNLOCK_STORAGE_KEY);
+      }
+    } catch (_error) {
+      // The password screen still works when storage is disabled.
+    }
+  }
+
   function showAccess(message) {
     elements.adminPage.hidden = true;
     elements.accessPage.hidden = false;
@@ -76,7 +104,17 @@
     detail.textContent = family.checkedIn
       ? `Checked in · ${family.checkedInMembers}/${family.totalMembers} members`
       : "Not checked in";
-    row.append(name, detail);
+    const actions = document.createElement("div");
+    actions.className = "daily-row-actions";
+    actions.append(detail);
+    if (!family.checkedIn) {
+      const checkIn = document.createElement("a");
+      checkIn.className = "check-in-link";
+      checkIn.href = `./?${isDemo ? "demo=1&" : ""}family=${encodeURIComponent(family.name)}&return=reports`;
+      checkIn.textContent = "Check in";
+      actions.append(checkIn);
+    }
+    row.append(name, actions);
     return row;
   }
 
@@ -246,6 +284,7 @@
     elements.accessSubmit.disabled = true;
     elements.accessSubmit.textContent = "Loading...";
     try {
+      rememberUnlock();
       showAdmin();
       await loadReports();
     } finally {
@@ -254,5 +293,11 @@
     }
   });
 
-  showAccess();
+  forgetOutdatedUnlock();
+  if (readRememberedUnlock()) {
+    showAdmin();
+    loadReports();
+  } else {
+    showAccess();
+  }
 })();

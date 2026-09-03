@@ -76,7 +76,7 @@ The endpoint caches the `Lists` data and header locations for up to five minutes
 
 The browser gives every submission a stable ID. If Google commits the sheet update but loses or delays the HTTP response, the browser checks the new `status` action before showing an error. Visitor retries reuse that ID and therefore update the original visitor rows instead of creating duplicates. This recovery behavior does not require another spreadsheet column.
 
-The check-in website stores a successfully verified family password in that browser's local storage. If the backend rejects it later, the stored value is removed and the password screen returns. Changing the Script property therefore takes effect the next time that browser makes a request. The administrator password is checked only in the browser and is requested again after the administrator page is reloaded.
+The check-in website stores a successfully verified family password in that browser's local storage. If the backend rejects it later, the stored value is removed and the password screen returns. Changing the Script property therefore takes effect the next time that browser makes a request. A successful administrator password entry is also remembered in that browser's local storage, so later visits open the reports without asking again.
 
 ## Local preview
 

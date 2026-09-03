@@ -262,6 +262,34 @@
   color: #8a4b48;
 }
 
+.daily-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+
+.check-in-link {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  border: 1px solid var(--brand-dark);
+  border-radius: 7px;
+  color: var(--brand-dark);
+  background: #fff;
+  font-size: 0.82rem;
+  font-weight: 750;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.check-in-link:hover,
+.check-in-link:focus-visible {
+  color: #fff;
+  background: var(--brand-dark);
+}
+
 .yearly-row > div {
   display: grid;
   gap: 3px;
@@ -321,6 +349,12 @@
   }
 
   .report-row {
-    align-items: flex-start;
+    align-items: center;
+  }
+
+  .daily-row-actions {
+    align-items: center;
+    flex-direction: row;
+    gap: 8px;
   }
 }

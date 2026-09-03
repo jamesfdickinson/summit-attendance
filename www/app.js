@@ -8,7 +8,10 @@
   const VISITOR_FAMILY = "Visitor";
   const config = window.SUMMIT_CONFIG || {};
   const endpoint = String(config.API_URL || "").trim();
-  const isDemo = new URLSearchParams(window.location.search).get("demo") === "1";
+  const searchParams = new URLSearchParams(window.location.search);
+  const isDemo = searchParams.get("demo") === "1";
+  const requestedFamily = String(searchParams.get("family") || "").trim();
+  const returnToReports = searchParams.get("return") === "reports";
   const hasEndpoint = /^https:\/\/script\.google\.com\/.+\/exec(?:\?.*)?$/i.test(endpoint);
 
   const elements = {
@@ -56,6 +59,7 @@
 
   let deferredInstallPrompt = null;
   let resetConfirmationOnResume = false;
+  let requestedFamilyApplied = false;
 
   const demoFamilies = [
     { name: "Dickinson, L", members: ["Lisa", "Abby", "Noah", "Hannah", "Andrew"] },
@@ -313,6 +317,17 @@
     return false;
   }
 
+  function selectInitialFamily() {
+    if (requestedFamilyApplied) return true;
+    if (requestedFamily && state.families.has(requestedFamily)) {
+      requestedFamilyApplied = true;
+      elements.family.value = requestedFamily;
+      loadSelectedFamily();
+      return true;
+    }
+    return selectRememberedFamily();
+  }
+
   function refreshRenderedFamilies(families) {
     const currentFamily = elements.family.value;
     const selected = selectedMembers();
@@ -402,7 +417,7 @@
     const hasCache = cachedFamilies.length > 0;
     if (hasCache) {
       renderFamilies(cachedFamilies);
-      selectRememberedFamily();
+      selectInitialFamily();
       setLoading("Refreshing families…", true);
     } else {
       setLoading("Loading families…", true);
@@ -417,9 +432,10 @@
 
       if (!hasCache) {
         renderFamilies(families);
-        if (!selectRememberedFamily()) elements.family.focus();
+        if (!selectInitialFamily()) elements.family.focus();
       } else if (JSON.stringify(families) !== JSON.stringify(cachedFamilies)) {
         refreshRenderedFamilies(families);
+        selectInitialFamily();
       }
       cacheFamilies(families);
       setLoading("", false);
@@ -593,6 +609,10 @@
   }
 
   function showSuccess(record) {
+    if (returnToReports) {
+      window.location.href = `admin.html${isDemo ? "?demo=1" : ""}`;
+      return;
+    }
     elements.successFamily.textContent = record.family;
     elements.successMembers.textContent = record.members.length === 0
       ? "No family members are marked present."

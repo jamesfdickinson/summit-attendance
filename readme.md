@@ -83,7 +83,7 @@ Open `/www/admin.html` to view the administrator reports. Add `?demo=1` to previ
 
 Family-list, save, and save-status requests require the server-side `SUMMIT_ACCESS_PASSWORD` Script property described in `google-apps-script/SETUP.md`. The family password is remembered in that browser's local storage and is removed if the backend rejects it.
 
-The administrator page checks the client-side password `board26` in `www/admin.js`. It does not send an administrator password to Apps Script or remember the password after the page reloads. There is no `SUMMIT_ADMIN_PASSWORD` Script property.
+The administrator page checks the client-side password `board26` in `www/admin.js`. It does not send an administrator password to Apps Script. After a correct entry, that browser remembers the unlock in local storage and opens reports automatically on later visits. There is no `SUMMIT_ADMIN_PASSWORD` Script property.
 
 Because a client-side password can be read from the site's source code or bypassed by calling the endpoint directly, the reports operation is not server-protected. The Google Sheet itself remains private, but attendance report data returned by the endpoint is publicly reachable. This arrangement is a convenience gate, not authentication.
 
