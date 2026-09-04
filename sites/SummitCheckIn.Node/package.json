@@ -1,0 +1,13 @@
+{
+  "name": "summit-check-in",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Summit Leadership Academy check-in site",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test.js"
+  }
+}

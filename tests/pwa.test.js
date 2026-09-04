@@ -4,7 +4,9 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const root = path.join(__dirname, "..", "www");
+const projectRoot = path.join(__dirname, "..");
+const root = path.join(projectRoot, "sites", "SummitCheckIn.Node", "public");
+const csharpRoot = path.join(projectRoot, "sites", "SummitCheckIn.Web", "wwwroot");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
@@ -27,7 +29,8 @@ assert.match(html, /id="access-password"[^>]*type="password"/);
 assert.match(html, /id="app-shell" hidden/);
 assert.match(app, /summit-check-in-access-password/);
 assert.doesNotMatch(app, /summit-check-in-admin-password/);
-assert.match(app, /password: state\.password/);
+assert.match(app, /"X-Summit-Password": state\.password/);
+assert.match(app, /fetch\(`\/api\/\$\{path\}`/);
 assert.match(app, /error\.code === "AUTH_REQUIRED"/);
 assert.match(html, /id="visitor-names"/);
 assert.match(app, /new Option\(VISITOR_FAMILY, VISITOR_FAMILY\)/);
@@ -39,7 +42,7 @@ assert.match(app, /state\.families\.has\(requestedFamily\)/);
 assert.match(app, /elements\.family\.value = requestedFamily/);
 assert.match(app, /window\.location\.href = `admin\.html\$\{isDemo \? "\?demo=1" : ""\}`/);
 assert.match(app, /submissionId: createSubmissionId\(\)/);
-assert.match(app, /request\("status"/);
+assert.match(app, /request\("check-ins\/status"/);
 assert.match(app, /await confirmSaved\(payload\)/);
 
 for (const icon of manifest.icons) {
@@ -56,5 +59,13 @@ for (const icon of manifest.icons) {
 assert.equal(fs.existsSync(path.join(root, "service-worker.js")), false);
 assert.match(app, /getRegistration\(appScope\)/);
 assert.match(app, /registration\.unregister\(\)/);
+
+for (const file of ["index.html", "admin.html", "styles.css", "admin.css", "app.js", "admin.js", "manifest.webmanifest"]) {
+  assert.deepEqual(
+    fs.readFileSync(path.join(csharpRoot, file)),
+    fs.readFileSync(path.join(root, file)),
+    `C# and Node static file differs: ${file}`
+  );
+}
 
 console.log("Online-only PWA manifest tests passed.");

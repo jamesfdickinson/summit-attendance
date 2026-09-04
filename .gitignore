@@ -1,0 +1,11 @@
+.dotnet-home/
+.tmp/
+.publish-review/
+.visual-review/
+.cleanup-backup/
+sites/**/bin/
+sites/**/obj/
+sites/**/appsettings.Development.json
+sites/**/.env
+*.user
+*.suo

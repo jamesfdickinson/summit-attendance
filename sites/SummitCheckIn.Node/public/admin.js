@@ -1,0 +1,321 @@
+(function () {
+  "use strict";
+
+  const ACCESS_PASSWORD_STORAGE_KEY = "summit-check-in-access-password";
+  const ADMIN_PASSWORD_STORAGE_KEY = "summit-check-in-admin-password";
+  const isDemo = new URLSearchParams(window.location.search).get("demo") === "1";
+  const demoFamilies = [
+    { name: "Dickinson, L", members: ["Lisa", "Abby", "Noah", "Hannah", "Andrew"] },
+    { name: "Garcia", members: ["Elena", "Mateo", "Sofia"] },
+    { name: "Williams", members: ["Jordan", "Taylor"] }
+  ];
+
+  const elements = {
+    adminPage: document.getElementById("admin-page"),
+    accessPage: document.getElementById("access-page"),
+    accessForm: document.getElementById("access-form"),
+    accessPassword: document.getElementById("access-password"),
+    accessError: document.getElementById("access-error"),
+    accessSubmit: document.getElementById("access-submit"),
+    accessBack: document.getElementById("access-back"),
+    loading: document.getElementById("admin-loading"),
+    error: document.getElementById("admin-error"),
+    errorMessage: document.getElementById("admin-error-message"),
+    content: document.getElementById("report-content"),
+    back: document.getElementById("back-button"),
+    refresh: document.getElementById("refresh-button"),
+    reportDate: document.getElementById("report-date"),
+    dailyDate: document.getElementById("daily-date"),
+    familyPercent: document.getElementById("family-percent"),
+    familyCount: document.getElementById("family-count"),
+    memberCount: document.getElementById("member-count"),
+    progress: document.getElementById("daily-progress"),
+    progressFill: document.getElementById("daily-progress-fill"),
+    dailyList: document.getElementById("daily-list"),
+    yearlyDescription: document.getElementById("yearly-description"),
+    yearlyList: document.getElementById("yearly-list"),
+    tabs: Array.from(document.querySelectorAll('[role="tab"]')),
+    panels: Array.from(document.querySelectorAll('[role="tabpanel"]'))
+  };
+
+  if (isDemo) {
+    elements.back.href = "./?demo=1";
+    elements.accessBack.href = "./?demo=1";
+  }
+
+  let password = "";
+
+  function readAdminPassword() {
+    try {
+      return localStorage.getItem(ADMIN_PASSWORD_STORAGE_KEY) || "";
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function rememberAdminPassword(value) {
+    try {
+      localStorage.setItem(ADMIN_PASSWORD_STORAGE_KEY, value);
+      localStorage.setItem(ACCESS_PASSWORD_STORAGE_KEY, value);
+    } catch (_error) {
+      // The reports remain available for this page load when storage is disabled.
+    }
+  }
+
+  function forgetRejectedAdminPassword(value) {
+    try {
+      if (localStorage.getItem(ADMIN_PASSWORD_STORAGE_KEY) === value) {
+        localStorage.removeItem(ADMIN_PASSWORD_STORAGE_KEY);
+      }
+    } catch (_error) {
+      // The password screen still works when storage is disabled.
+    }
+  }
+
+  function isAccessError(error) {
+    return error && (error.code === "AUTH_REQUIRED" || error.code === "AUTH_NOT_CONFIGURED");
+  }
+
+  function showAccess(message) {
+    forgetRejectedAdminPassword(password);
+    password = "";
+    elements.adminPage.hidden = true;
+    elements.accessPage.hidden = false;
+    elements.accessError.textContent = message || "";
+    elements.accessError.hidden = !message;
+    elements.accessPassword.value = "";
+    elements.accessPassword.focus();
+  }
+
+  function showAdmin() {
+    elements.accessPage.hidden = true;
+    elements.adminPage.hidden = false;
+  }
+
+  function formatDate(dateText) {
+    const date = new Date(`${dateText}T12:00:00`);
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: "long", month: "long", day: "numeric", year: "numeric"
+    }).format(date);
+  }
+
+  function makeStatusRow(family) {
+    const row = document.createElement("div");
+    row.className = "report-row";
+    const name = document.createElement("strong");
+    name.textContent = family.name;
+    const detail = document.createElement("span");
+    detail.className = family.checkedIn ? "status status-present" : "status status-absent";
+    detail.textContent = family.checkedIn
+      ? `Checked in · ${family.checkedInMembers}/${family.totalMembers} members`
+      : "Not checked in";
+    const actions = document.createElement("div");
+    actions.className = "daily-row-actions";
+    actions.append(detail);
+    if (!family.checkedIn) {
+      const checkIn = document.createElement("a");
+      checkIn.className = "check-in-link";
+      checkIn.href = `./?${isDemo ? "demo=1&" : ""}family=${encodeURIComponent(family.name)}&return=reports`;
+      checkIn.textContent = "Check in";
+      actions.append(checkIn);
+    }
+    row.append(name, actions);
+    return row;
+  }
+
+  function makeYearRow(family) {
+    const row = document.createElement("div");
+    row.className = "report-row yearly-row";
+    const text = document.createElement("div");
+    const name = document.createElement("strong");
+    name.textContent = family.name;
+    const count = document.createElement("small");
+    count.textContent = `${family.attendedThursdays} of ${family.totalThursdays} Thursdays`;
+    text.append(name, count);
+    const percent = document.createElement("strong");
+    percent.className = "year-percent";
+    percent.textContent = `${family.percent}%`;
+    row.append(text, percent);
+    return row;
+  }
+
+  function selectTab(selectedTab, moveFocus) {
+    elements.tabs.forEach((tab) => {
+      const isSelected = tab === selectedTab;
+      tab.setAttribute("aria-selected", String(isSelected));
+      tab.tabIndex = isSelected ? 0 : -1;
+    });
+    elements.panels.forEach((panel) => {
+      panel.hidden = panel.id !== selectedTab.getAttribute("aria-controls");
+    });
+    if (moveFocus) selectedTab.focus();
+  }
+
+  elements.tabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => selectTab(tab, false));
+    tab.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      let nextIndex = index;
+      if (event.key === "ArrowLeft") nextIndex = (index - 1 + elements.tabs.length) % elements.tabs.length;
+      if (event.key === "ArrowRight") nextIndex = (index + 1) % elements.tabs.length;
+      if (event.key === "Home") nextIndex = 0;
+      if (event.key === "End") nextIndex = elements.tabs.length - 1;
+      selectTab(elements.tabs[nextIndex], true);
+    });
+  });
+
+  function render(reports) {
+    const daily = reports.daily;
+    elements.reportDate.textContent = `Current as of ${formatDate(reports.date)}`;
+    elements.dailyDate.textContent = formatDate(reports.date);
+    elements.familyPercent.textContent = `${daily.familyPercent}%`;
+    elements.familyCount.textContent = `${daily.checkedInFamilies} of ${daily.totalFamilies} families`;
+    elements.memberCount.textContent = `${daily.checkedInMembers} / ${daily.totalMembers}`;
+    elements.progress.setAttribute("aria-valuenow", String(daily.familyPercent));
+    elements.progressFill.style.width = `${daily.familyPercent}%`;
+    elements.dailyList.replaceChildren(...daily.families.map(makeStatusRow));
+    const range = reports.yearly.startDate && reports.yearly.endDate
+      ? `${formatDate(reports.yearly.startDate)} – ${formatDate(reports.yearly.endDate)}`
+      : "No attendance data yet";
+    elements.yearlyDescription.textContent = `${reports.year} · ${range} · ${reports.yearly.thursdaysWithData} Thursdays with data`;
+    elements.yearlyList.replaceChildren(...reports.yearly.families.map(makeYearRow));
+    elements.content.hidden = false;
+  }
+
+  async function getLiveReports() {
+    const response = await fetch("/api/reports", {
+      method: "GET",
+      cache: "no-store",
+      headers: { "X-Summit-Password": password }
+    });
+    let data;
+    try {
+      data = await response.json();
+    } catch (_error) {
+      throw new Error(response.ok
+        ? "The reporting service returned an invalid response."
+        : "The reporting service is unavailable. Please try again.");
+    }
+    if (!response.ok || !data || data.ok !== true) {
+      const error = new Error((data && data.error) || "The reports could not be loaded.");
+      error.code = data && data.code;
+      throw error;
+    }
+    return data;
+  }
+
+  function getDemoReports() {
+    let records = {};
+    try {
+      records = JSON.parse(localStorage.getItem("summit-check-in-demo-records") || "{}");
+    } catch (_error) {
+      records = {};
+    }
+    const now = new Date();
+    const date = now.toISOString().slice(0, 10);
+    const year = now.getFullYear();
+    const recordDates = Object.values(records)
+      .map((record) => String(record?.timestamp || "").slice(0, 10))
+      .filter((recordDate) => recordDate.startsWith(`${year}-`))
+      .sort();
+    const startDate = recordDates[0] || "";
+    const endDate = recordDates[recordDates.length - 1] || "";
+    const thursdaysWithData = new Set(recordDates.filter((recordDate) => (
+      new Date(`${recordDate}T12:00:00`).getDay() === 4
+    ))).size;
+    const families = demoFamilies.map((family) => {
+      const record = records[family.name];
+      const members = Array.isArray(record?.members) ? record.members : [];
+      const checkedIn = members.length > 0 && String(record.timestamp || "").slice(0, 10) === date;
+      return { name: family.name, checkedIn, checkedInMembers: checkedIn ? members.length : 0, totalMembers: family.members.length };
+    });
+    const checkedInFamilies = families.filter((family) => family.checkedIn).length;
+    return {
+      date,
+      year,
+      daily: {
+        checkedInFamilies,
+        totalFamilies: families.length,
+        familyPercent: families.length ? Math.round(checkedInFamilies / families.length * 100) : 0,
+        checkedInMembers: families.reduce((sum, family) => sum + family.checkedInMembers, 0),
+        totalMembers: families.reduce((sum, family) => sum + family.totalMembers, 0),
+        families
+      },
+      yearly: {
+        startDate,
+        endDate,
+        thursdaysWithData,
+        families: families.map((family) => ({
+          name: family.name,
+          attendedThursdays: family.checkedIn && now.getDay() === 4 ? 1 : 0,
+          totalThursdays: thursdaysWithData,
+          percent: family.checkedIn && now.getDay() === 4 && thursdaysWithData ? Math.round(100 / thursdaysWithData) : 0
+        }))
+      }
+    };
+  }
+
+  async function loadReports(options) {
+    const unlocking = Boolean(options && options.unlocking);
+    elements.loading.hidden = false;
+    elements.error.hidden = true;
+    elements.refresh.disabled = true;
+    try {
+      const response = isDemo
+        ? { reports: getDemoReports() }
+        : await getLiveReports();
+      render(response.reports);
+      return response;
+    } catch (error) {
+      if (isAccessError(error)) {
+        showAccess(error.message);
+        return null;
+      }
+      if (unlocking) {
+        elements.accessError.textContent = error.message;
+        elements.accessError.hidden = false;
+        return null;
+      }
+      elements.errorMessage.textContent = error.message;
+      elements.error.hidden = false;
+      return null;
+    } finally {
+      elements.loading.hidden = true;
+      elements.refresh.disabled = false;
+    }
+  }
+
+  elements.refresh.addEventListener("click", loadReports);
+  elements.accessForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const enteredPassword = elements.accessPassword.value;
+    if (!enteredPassword) return;
+    password = enteredPassword;
+    elements.accessError.hidden = true;
+    elements.accessSubmit.disabled = true;
+    elements.accessSubmit.textContent = "Loading...";
+    try {
+      const response = await loadReports({ unlocking: true });
+      if (!response) return;
+      rememberAdminPassword(enteredPassword);
+      showAdmin();
+    } finally {
+      elements.accessSubmit.disabled = false;
+      elements.accessSubmit.textContent = "View reports";
+    }
+  });
+
+  if (isDemo) {
+    showAdmin();
+    loadReports();
+  } else {
+    password = readAdminPassword();
+    if (password) {
+      showAdmin();
+      loadReports();
+    } else {
+      showAccess();
+    }
+  }
+})();

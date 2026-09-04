@@ -32,7 +32,7 @@ In the Apps Script editor, open **Project Settings** and add this **Script prope
 
 Use a non-empty value and keep it only in Script properties; do not add it to `Code.gs`, `config.js`, or any website file.
 
-The administrator page uses the client-side password `board26`, defined in `www/admin.js`. There is no server-side administrator password or administrator Script property. Consequently, the reports endpoint is publicly callable by anyone who knows its URL; the client-side password only hides the normal administrator interface.
+The administrator password is checked locally by `public/admin.js`. It is a superficial browser gate and is not sent to Apps Script; consequently, the reports operation is publicly callable by anyone who knows the Apps Script URL.
 
 ## 4. Deploy the web app
 
@@ -47,7 +47,7 @@ Use the `/exec` deployment URL, not the temporary `/dev` test URL.
 
 ## 5. Connect the website
 
-Open `www/config.js` and replace the placeholder with the deployment URL:
+Open `public/config.js` in the standalone site folder and replace the placeholder with the deployment URL:
 
 ```js
 window.SUMMIT_CONFIG = Object.freeze({
@@ -55,7 +55,7 @@ window.SUMMIT_CONFIG = Object.freeze({
 });
 ```
 
-Deploy the contents of `www` to any static web host.
+Deploy the contents of the `public` folder to any static web host. The `apps-script` source folder stays out of the public site.
 
 ## Updating the script later
 
@@ -70,7 +70,7 @@ The deployment URL normally remains the same.
 
 When publishing this optimized version, deploy `Code.gs` first and the updated `www` files second. The website's recovery check depends on the new `status` action, and visitor retries depend on the server accepting the browser-generated submission ID.
 
-The spreadsheet URL is not the web app API URL. Keep the `/exec` deployment URL in `www/config.js`; after changing `Code.gs`, create and deploy a new Apps Script version so that endpoint runs the updated code.
+The spreadsheet URL is not the web app API URL. Keep the `/exec` deployment URL in `public/config.js`; after changing `Code.gs`, create and deploy a new Apps Script version so that endpoint runs the updated code.
 
 The endpoint caches the `Lists` data and header locations for up to five minutes to reduce save time. Recent family-list edits may therefore take a few minutes to appear on the check-in page. Each selected member is stored on a separate `CheckIns` row. Re-submitting a family's attendance on the same day replaces all of that family's rows for the day. Their shared `CheckInID` contains the sheet-timezone date and family name, enabling an exact single-column lookup.
 
@@ -82,6 +82,6 @@ The check-in website stores a successfully verified family password in that brow
 
 Before the endpoint is configured, preview the complete interface with demo data by serving the project root and opening:
 
-`http://localhost:8000/www/?demo=1`
+`http://localhost:8000/?demo=1`
 
 Demo submissions are stored only in that browser's local storage and never reach Google Sheets.

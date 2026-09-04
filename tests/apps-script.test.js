@@ -229,9 +229,20 @@ const context = vm.createContext({
   }
 });
 
-const codePath = path.join(__dirname, "..", "google-apps-script", "Code.gs");
+const codePath = path.join(__dirname, "..", "sites", "SummitCheckIn.AppsScript", "apps-script", "Code.gs");
 const code = fs.readFileSync(codePath, "utf8");
 assert.doesNotMatch(code, /SUMMIT_ADMIN_PASSWORD/);
+const appsScriptRoot = path.join(path.dirname(path.dirname(codePath)), "public");
+const appsScriptHtml = fs.readFileSync(path.join(appsScriptRoot, "index.html"), "utf8");
+const appsScriptApp = fs.readFileSync(path.join(appsScriptRoot, "app.js"), "utf8");
+const appsScriptAdmin = fs.readFileSync(path.join(appsScriptRoot, "admin.js"), "utf8");
+assert.match(appsScriptHtml, /src="config\.js"/);
+assert.match(appsScriptApp, /fetch\(url, fetchOptions\)/);
+assert.match(appsScriptApp, /action, password: state\.password/);
+assert.match(appsScriptAdmin, /fetch\(endpoint/);
+assert.match(appsScriptAdmin, /CLIENT_ADMIN_PASSWORD/);
+assert.match(appsScriptAdmin, /JSON\.stringify\(\{ action: "reports" \}\)/);
+assert.doesNotMatch(appsScriptAdmin, /action: "reports", password/);
 vm.runInContext(code, context, { filename: codePath });
 
 function get(action, parameters) {
