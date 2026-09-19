@@ -35,6 +35,10 @@ The spreadsheet remains private. The selected server is the only component that 
 
 See [`sites/SummitCheckIn.Web/README.md`](sites/SummitCheckIn.Web/README.md).
 
+Azure hosting is prepared with [a GitHub Actions workflow](.github/workflows/azure-web.yml)
+targeting branch `compare-3-versions` and the C# project folder. Follow the C# README's
+one-time Azure and GitHub setup to enable deployment.
+
 ```powershell
 cd sites/SummitCheckIn.Web
 dotnet run
