@@ -14,6 +14,28 @@ Share the Google Sheet with the service account's `client_email` as an Editor an
 
 ## Azure
 
+### Direct deployment from your computer
+
+For occasional releases, use the root PowerShell script instead of GitHub Actions.
+Install the .NET 10 SDK and Azure CLI, then run from the repository root:
+
+```powershell
+.\deploy.ps1
+```
+
+It publishes the C# app, creates a ZIP in a fresh Git-ignored `.tmp` directory,
+prompts for Azure sign-in if needed, and deploys to Web App `summit-checkin` in
+resource group `summit-checkin`. Existing Azure environment settings are preserved.
+The development settings file is excluded from the package.
+
+Use `-Subscription 'your-subscription-id'` if you have multiple subscriptions.
+You can override the target with `-ResourceGroup` and `-AppName`.
+Use `.\deploy.ps1 -PackageOnly` to build the ZIP without signing in or deploying.
+After deployment, open the printed site URL and test family loading and reports.
+Repeat the command whenever you want to publish an update.
+
+### GitHub Actions deployment (optional)
+
 Deploy this folder from branch `compare-3-versions` using the repository's
 [`azure-web.yml`](../../.github/workflows/azure-web.yml) workflow. It tests the site,
 publishes this C# project, and deploys only the published output to Azure App Service.

@@ -1,5 +1,20 @@
 # Summit Leadership Check-In
 
+## Public GitHub Pages landing page
+
+`www-git-hub/` contains the Summit-branded public landing page. It automatically
+redirects after three seconds to `https://checkin.jdsoftwarellc.com/` and includes
+a matching check-in button if automatic forwarding is blocked. The logo and icon
+are bundled in that folder, and the page works without JavaScript.
+
+In repository **Settings > Pages**, set **Source** to **GitHub Actions**. The
+`.github/workflows/static.yml` workflow publishes only `www-git-hub/` as the site
+root on pushes to `main` (or a manual workflow run on the chosen branch). GitHub's
+"Deploy from a branch" option cannot select this custom folder directly.
+
+The custom check-in domain should point to the Azure app; the GitHub Pages site
+provides the redirect. Updating this landing page does not change DNS or Azure.
+
 The project now includes three complete, self-contained versions of the same site:
 
 - `sites/SummitCheckIn.Web/` — simple ASP.NET Core / C# site
