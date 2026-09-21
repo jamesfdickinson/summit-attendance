@@ -1,0 +1,4 @@
+{
+    "appService.defaultWebAppToDeploy": "/subscriptions/da06a6ca-c942-43b8-9280-e6d3c358d538/resourceGroups/summit-checkin/providers/Microsoft.Web/sites/summit-checkin",
+    "appService.deploySubpath": "site\\bin\\Release\\net10.0\\publish"
+}
