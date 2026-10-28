@@ -342,7 +342,7 @@ function getAttendanceReports_() {
       const checkInDate = getCheckInDate_(row, headers, timezone);
       if (!checkInDate) return;
 
-      if (Number(checkInDate.slice(0, 4)) === year) {
+      {
         if (!reportStartDate || checkInDate < reportStartDate) reportStartDate = checkInDate;
         if (!reportEndDate || checkInDate > reportEndDate) reportEndDate = checkInDate;
         if (isWeekday_(checkInDate, 4)) reportThursdayDates[checkInDate] = true;
@@ -355,7 +355,7 @@ function getAttendanceReports_() {
         membersToday[family][member] = true;
       }
 
-      if (Number(checkInDate.slice(0, 4)) === year && isWeekday_(checkInDate, 4)) {
+      if (isWeekday_(checkInDate, 4)) {
         yearlyDatesByFamily[family][checkInDate] = true;
       }
     });
@@ -375,6 +375,7 @@ function getAttendanceReports_() {
   }, 0);
 
   return {
+    parents: getParentAttendanceReport_(timezone),
     generatedAt: now.toISOString(),
     date: today,
     year: year,
@@ -614,4 +615,52 @@ function jsonResponse_(payload) {
   return ContentService
     .createTextOutput(JSON.stringify(payload))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// Each dated CheckIns row establishes a meeting, including an empty attendance submission.
+function getParentAttendanceReport_(timezone) {
+  const context = getSheetContext_(FAMILY_LIST_SHEET, LIST_HEADERS);
+  const listRows = context.sheet.getDataRange().getDisplayValues();
+  const checkIns = getCheckInContext_().sheet.getDataRange().getValues();
+  return buildParentAttendanceReport_(listRows, checkIns, timezone);
+}
+
+function buildParentAttendanceReport_(listRows, checkIns, timezone) {
+  const result = { totalThursdays: 0, parents: [] };
+  const listHeaders = listRows[0].map(function (header) { return String(header).trim(); });
+  const typeIndex = listHeaders.findIndex(function (header) { return header.toLowerCase() === 'type'; });
+  if (typeIndex < 0) {
+    result.message = 'Add a type column to Lists and mark each parent as Parent.';
+    return result;
+  }
+  const familyIndex = listHeaders.indexOf('Family Name');
+  const nameIndex = listHeaders.indexOf('Member Name');
+  const parents = new Map();
+  listRows.slice(1).forEach(function (row) {
+    if (String(row[typeIndex] || '').trim().toLowerCase() !== 'parent') return;
+    const family = String(row[familyIndex] || '').trim();
+    const name = String(row[nameIndex] || '').trim();
+    const key = JSON.stringify([family, name]);
+    if (family && name && !parents.has(key)) parents.set(key, { family: family, name: name, dates: new Set() });
+  });
+  const headers = Object.create(null);
+  checkIns[0].forEach(function (header, index) { headers[String(header).trim()] = index; });
+  const meetingDates = new Set();
+  checkIns.slice(1).forEach(function (row) {
+    const date = getCheckInDate_(row, headers, timezone);
+    if (!date || !isWeekday_(date, 4)) return;
+    meetingDates.add(date);
+    const family = String(row[headers['Family Name']] || '').trim();
+    const name = String(row[headers['Member Present']] || '').trim();
+    const parent = parents.get(JSON.stringify([family, name]));
+    if (parent) parent.dates.add(date);
+  });
+  result.totalThursdays = meetingDates.size;
+  result.parents = Array.from(parents.values()).sort(function (a, b) {
+    return a.family.localeCompare(b.family) || a.name.localeCompare(b.name);
+  }).map(function (parent) {
+    return { name: parent.name, family: parent.family, attendedThursdays: parent.dates.size,
+      totalThursdays: meetingDates.size, percent: percentage_(parent.dates.size, meetingDates.size) };
+  });
+  return result;
 }

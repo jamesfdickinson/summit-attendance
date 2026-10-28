@@ -65,8 +65,9 @@
             Today's attendance
           </button>
           <button class="report-tab" id="yearly-tab" type="button" role="tab" aria-selected="false" aria-controls="yearly-panel" tabindex="-1">
-            Thursday attendance
+            Thursday attendance - Family
           </button>
+          <button class="report-tab" id="parents-tab" type="button" role="tab" aria-selected="false" aria-controls="parents-panel" tabindex="-1">Parent attendance</button>
         </div>
 
         <section class="report-card report-tab-panel" id="daily-panel" role="tabpanel" aria-labelledby="daily-tab">
@@ -101,12 +102,22 @@
         <section class="report-card report-tab-panel" id="yearly-panel" role="tabpanel" aria-labelledby="yearly-tab" hidden>
           <div class="report-heading">
             <div>
-              <p class="eyebrow">Thursday attendance</p>
+              <p class="eyebrow">Thursday attendance - Family</p>
               <h2 id="yearly-title"></h2>
               <p id="yearly-description"></p>
             </div>
           </div>
           <div class="report-list" id="yearly-list"></div>
+        </section>
+        <section class="report-card report-tab-panel" id="parents-panel" role="tabpanel" aria-labelledby="parents-tab" hidden>
+          <div class="report-heading"><div>
+            <p class="eyebrow">Thursday attendance</p>
+            <h2>Parent Thursday attendance</h2>
+            <p id="parents-description"></p>
+            <p>Each parent's percentage is Thursdays attended divided by all Thursdays with attendance data in this sheet. Thursdays without data are excluded.</p>
+          </div></div>
+          <p id="parents-empty" hidden></p>
+          <div class="report-list" id="parents-list"></div>
         </section>
       </div>
     </main>

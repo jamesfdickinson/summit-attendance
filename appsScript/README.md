@@ -18,4 +18,11 @@ This edition requires no Azure server or service account. Its tradeoff is the oc
 
 ## Preview
 
+The admin **Parent attendance** tab uses the `Lists` sheet's `type` column:
+mark each parent `Parent`. It shows a percentage per parent using all Thursdays with CheckIns data in the
+current sheet, without date limits. The family Thursday report also uses all years.
+Repeated rows count once per parent/date, and parents without attendance remain
+listed. No recorded Thursdays displays N/A. Deploy both the updated frontend
+and a new Apps Script version to enable this report.
+
 Serve the `public` folder with any static web server and add `?demo=1` to the URL. Demo mode does not access Google Sheets.

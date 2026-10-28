@@ -94,6 +94,7 @@
 
 .report-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 0 8px;
   border-bottom: 1px solid #d7dde3;

@@ -169,7 +169,9 @@ namespace SummitCheckIn.Web
     public sealed record YearlyFamilyDto(string Name, int AttendedThursdays, int TotalThursdays, int Percent);
     public sealed record DailyReportDto(int CheckedInFamilies, int TotalFamilies, int FamilyPercent, int CheckedInMembers, int TotalMembers, IReadOnlyList<DailyFamilyDto> Families);
     public sealed record YearlyReportDto(string StartDate, string EndDate, int ThursdaysWithData, IReadOnlyList<YearlyFamilyDto> Families);
-    public sealed record AttendanceReportsDto(string GeneratedAt, string Date, int Year, DailyReportDto Daily, YearlyReportDto Yearly);
+    public sealed record ParentAttendanceDto(string Name, string Family, int AttendedThursdays, int TotalThursdays, int Percent);
+    public sealed record ParentReportDto(int TotalThursdays, IReadOnlyList<ParentAttendanceDto> Parents, string? Message = null);
+    public sealed record AttendanceReportsDto(string GeneratedAt, string Date, int Year, DailyReportDto Daily, YearlyReportDto Yearly, ParentReportDto Parents);
 
     public sealed class ApiFailureException(string message, string code, int statusCode) : Exception(message)
     {

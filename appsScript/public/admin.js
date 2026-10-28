@@ -37,6 +37,9 @@
     dailyList: document.getElementById("daily-list"),
     yearlyDescription: document.getElementById("yearly-description"),
     yearlyList: document.getElementById("yearly-list"),
+    parentsDescription: document.getElementById("parents-description"),
+    parentsList: document.getElementById("parents-list"),
+    parentsEmpty: document.getElementById("parents-empty"),
     tabs: Array.from(document.querySelectorAll('[role="tab"]')),
     panels: Array.from(document.querySelectorAll('[role="tabpanel"]'))
   };
@@ -170,11 +173,24 @@
     elements.progress.setAttribute("aria-valuenow", String(daily.familyPercent));
     elements.progressFill.style.width = `${daily.familyPercent}%`;
     elements.dailyList.replaceChildren(...daily.families.map(makeStatusRow));
-    const range = reports.yearly.startDate && reports.yearly.endDate
-      ? `${formatDate(reports.yearly.startDate)} – ${formatDate(reports.yearly.endDate)}`
-      : "No attendance data yet";
-    elements.yearlyDescription.textContent = `${reports.year} · ${range} · ${reports.yearly.thursdaysWithData} Thursdays with data`;
+    elements.yearlyDescription.textContent = `${reports.yearly.thursdaysWithData} Thursdays with data in this sheet`;
     elements.yearlyList.replaceChildren(...reports.yearly.families.map(makeYearRow));
+    const parents = reports.parents;
+    elements.parentsDescription.textContent = parents
+      ? `${parents.totalThursdays} Thursdays with data in this sheet`
+      : "";
+    elements.parentsEmpty.textContent = !parents ? "Update the reporting service to load parent attendance."
+      : parents.message || (parents.parents.length ? "" : "No parents found. Set type to Parent for each parent in Lists.");
+    elements.parentsEmpty.hidden = !elements.parentsEmpty.textContent;
+    elements.parentsList.replaceChildren(...(parents?.parents || []).map(parent => {
+      const row = makeYearRow(parent);
+      const family = document.createElement("small");
+      family.textContent = parent.family;
+      row.firstChild.insertBefore(family, row.firstChild.lastChild);
+      if (!parent.totalThursdays) row.lastChild.textContent = "N/A";
+      return row;
+    }));
+    elements.parentsList.hidden = !parents?.parents.length;
     elements.content.hidden = false;
   }
 
@@ -210,7 +226,7 @@
     const year = now.getFullYear();
     const recordDates = Object.values(records)
       .map((record) => String(record?.timestamp || "").slice(0, 10))
-      .filter((recordDate) => recordDate.startsWith(`${year}-`))
+      .filter((recordDate) => /^\d{4}-\d{2}-\d{2}$/.test(recordDate))
       .sort();
     const startDate = recordDates[0] || "";
     const endDate = recordDates[recordDates.length - 1] || "";
@@ -223,6 +239,11 @@
       const checkedIn = members.length > 0 && String(record.timestamp || "").slice(0, 10) === date;
       return { name: family.name, checkedIn, checkedInMembers: checkedIn ? members.length : 0, totalMembers: family.members.length };
     });
+    function demoFamilyAttended(name) {
+      const record = records[name];
+      const day = String(record?.timestamp || "").slice(0, 10);
+      return record?.members?.length > 0 && new Date(day + "T12:00:00Z").getUTCDay() === 4;
+    }
     const checkedInFamilies = families.filter((family) => family.checkedIn).length;
     return {
       date,
@@ -235,18 +256,33 @@
         totalMembers: families.reduce((sum, family) => sum + family.totalMembers, 0),
         families
       },
+      parents: getDemoParentReport(records),
       yearly: {
         startDate,
         endDate,
         thursdaysWithData,
         families: families.map((family) => ({
           name: family.name,
-          attendedThursdays: family.checkedIn && now.getDay() === 4 ? 1 : 0,
+          attendedThursdays: demoFamilyAttended(family.name) ? 1 : 0,
           totalThursdays: thursdaysWithData,
-          percent: family.checkedIn && now.getDay() === 4 && thursdaysWithData ? Math.round(100 / thursdaysWithData) : 0
+          percent: demoFamilyAttended(family.name) && thursdaysWithData ? Math.round(100 / thursdaysWithData) : 0
         }))
       }
     };
+  }
+
+  function getDemoParentReport(records) {
+    const totalThursdays = new Set(Object.values(records).map(record => String(record?.timestamp || "").slice(0, 10))
+      .filter(date => new Date(date + "T12:00:00Z").getUTCDay() === 4)).size;
+    return { totalThursdays, parents: demoFamilies.map(family => {
+      const name = family.members[0];
+      const record = records[family.name];
+      const date = String(record?.timestamp || "").slice(0, 10);
+      const attendedThursdays = record?.members?.includes(name)
+        && new Date(date + "T12:00:00Z").getUTCDay() === 4 ? 1 : 0;
+      return { name, family: family.name, attendedThursdays, totalThursdays,
+        percent: totalThursdays ? Math.round(attendedThursdays / totalThursdays * 100) : 0 };
+    }) };
   }
 
   async function loadReports() {

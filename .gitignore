@@ -1,5 +1,9 @@
 .dotnet-home/
 .tmp/
+site/bin/
+site/obj/
+tests/bin/
+tests/obj/
 .publish-review/
 .visual-review/
 .cleanup-backup/

@@ -201,6 +201,8 @@ public sealed class GoogleSheetsAttendanceStore(
         var now = DateTimeOffset.UtcNow;
         var today = TimeZoneInfo.ConvertTime(now, metadata.TimeZone).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var year = int.Parse(today[..4], CultureInfo.InvariantCulture);
+        var listRows = await GetValuesAsync("Lists", cancellationToken);
+        var parentReport = BuildParentReport(listRows, rows, metadata.TimeZone);
         var familyNames = families.Select(family => family.Name).ToHashSet(StringComparer.Ordinal);
         var reportDates = new SortedSet<string>(StringComparer.Ordinal);
         var thursdayDates = new HashSet<string>(StringComparer.Ordinal);
@@ -216,7 +218,6 @@ public sealed class GoogleSheetsAttendanceStore(
             var date = separator > 0 ? id[..separator] : "";
             if (!DateOnly.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
                 continue;
-            if (parsed.Year != year) continue;
 
             reportDates.Add(date);
             if (parsed.DayOfWeek == DayOfWeek.Thursday) thursdayDates.Add(date);
@@ -255,7 +256,52 @@ public sealed class GoogleSheetsAttendanceStore(
                 reportDates.FirstOrDefault() ?? "",
                 reportDates.LastOrDefault() ?? "",
                 thursdayDates.Count,
-                yearlyFamilies));
+                yearlyFamilies),
+            parentReport);
+    }
+
+    public static ParentReportDto BuildParentReport(
+        IReadOnlyList<IReadOnlyList<JsonElement>> listRows,
+        IReadOnlyList<IReadOnlyList<JsonElement>> checkInRows,
+        TimeZoneInfo? timeZone = null)
+    {
+        var total = 0;
+        var listHeaders = HeaderMap(listRows[0], "Lists", ["Family Name", "Member Name"]);
+        var typeHeader = listHeaders.Keys.FirstOrDefault(key => key.Equals("type", StringComparison.OrdinalIgnoreCase));
+        if (typeHeader is null)
+            return new(total, [], "Add a type column to Lists and mark each parent as Parent.");
+        var parents = new Dictionary<(string Family, string Name), HashSet<DateOnly>>();
+        foreach (var row in listRows.Skip(1))
+        {
+            if (!CellText(row, listHeaders[typeHeader]).Trim().Equals("parent", StringComparison.OrdinalIgnoreCase)) continue;
+            var family = CellText(row, listHeaders["Family Name"]).Trim();
+            var name = CellText(row, listHeaders["Member Name"]).Trim();
+            if (family.Length > 0 && name.Length > 0) parents.TryAdd((family, name), []);
+        }
+        var headers = HeaderMap(checkInRows[0], "CheckIns", CheckInHeaders);
+        var recordedThursdays = new HashSet<DateOnly>();
+        foreach (var row in checkInRows.Skip(1))
+        {
+            var key = (CellText(row, headers["Family Name"]).Trim(), CellText(row, headers["Member Present"]).Trim());
+            var dateText = CellText(row, headers["CheckInID"]).Split('|')[0];
+            if (!DateOnly.TryParseExact(dateText, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+            {
+                if (!DateTimeOffset.TryParse(CellText(row, headers["Timestamp"]), CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal, out var timestamp)) continue;
+                date = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(timestamp, timeZone ?? TimeZoneInfo.Utc).DateTime);
+            }
+            if (date.DayOfWeek == DayOfWeek.Thursday)
+            {
+                recordedThursdays.Add(date);
+                if (parents.TryGetValue(key, out var dates)) dates.Add(date);
+            }
+        }
+        total = recordedThursdays.Count;
+        var result = parents.OrderBy(pair => pair.Key.Family, StringComparer.CurrentCulture)
+            .ThenBy(pair => pair.Key.Name, StringComparer.CurrentCulture)
+            .Select(pair => new ParentAttendanceDto(pair.Key.Name, pair.Key.Family, pair.Value.Count, total, Percentage(pair.Value.Count, total)))
+            .ToArray();
+        return new(total, result);
     }
 
     private async Task<IReadOnlyList<IReadOnlyList<JsonElement>>> GetValuesAsync(string sheet, CancellationToken cancellationToken)
