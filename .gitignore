@@ -13,3 +13,7 @@ sites/**/appsettings.Development.json
 sites/**/.env
 *.user
 *.suo
+*.PublishSettings
+*.publishsettings
+*.pubxml
+*.pubxml.user
